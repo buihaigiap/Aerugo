@@ -6,10 +6,10 @@ server:
 database:
   host: "localhost"
   port: 5432
-  username: "postgres"
-  password: "postgres"
-  database_name: "aerugo"
-  require_ssl: true
+  username: "aerugo"
+  password: "1"
+  database_name: "aerugo_dev"
+  require_ssl: false
   min_connections: 5
   max_connections: 20
 
@@ -27,6 +27,6 @@ cache:
   ttl_seconds: 3600
 
 auth:
-  jwt_secret: "your-secret-key"
+  jwt_secret: "your-super-secret-key"
   jwt_expiration_seconds: 3600
   refresh_token_expiration_seconds: 604800  # 7 days

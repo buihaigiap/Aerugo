@@ -3,7 +3,7 @@ use secrecy::{Secret, ExposeSecret};
 use validator::Validate;
 use std::net::SocketAddr;
 use url::Url;
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct Settings {
@@ -40,6 +40,8 @@ pub struct DatabaseSettings {
     pub min_connections: u32,
     pub max_connections: u32,
 }
+
+
 
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct StorageSettings {
@@ -115,7 +117,7 @@ impl DatabaseSettings {
     pub fn connection_string(&self) -> String {
         let ssl_mode = if self.require_ssl { "require" } else { "prefer" };
         format!(
-            "postgres://{}:{}@{}:{}/{}?sslmode={}",
+            "postgresql://{}:{}@{}:{}/{}?sslmode={}",
             self.username,
             self.password.expose_secret(),
             self.host,
