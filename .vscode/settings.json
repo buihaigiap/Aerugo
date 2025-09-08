@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.cargo.watchOptions": {
+        "allTargets": false
+    },
+    "rust-analyzer.check.command": "clippy",
+    "editor.formatOnSave": true
+}
