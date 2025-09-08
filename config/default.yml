@@ -1,0 +1,32 @@
+server:
+  bind_address: "127.0.0.1:3000"
+  port: 3000
+  api_prefix: "/api/v1"
+
+database:
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: "postgres"
+  database_name: "aerugo"
+  require_ssl: true
+  min_connections: 5
+  max_connections: 20
+
+storage:
+  endpoint: "http://localhost:9000"
+  region: "us-east-1"
+  bucket: "aerugo"
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
+  use_path_style: true
+
+cache:
+  redis_url: "redis://localhost:6379"
+  pool_size: 10
+  ttl_seconds: 3600
+
+auth:
+  jwt_secret: "your-secret-key"
+  jwt_expiration_seconds: 3600
+  refresh_token_expiration_seconds: 604800  # 7 days
