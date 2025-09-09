@@ -65,22 +65,58 @@ class AuthTests(BaseTestCase):
         """Test user login"""
         self.logger.info("Testing user login")
         
-        # Use dynamic users if available, fallback to TEST_USERS
-        test_users = self.dynamic_users if self.dynamic_users else TEST_USERS
+        # Create new test users specifically for this test
+        # This handles the case where tests are run individually through pytest
+        import random
+        import string
         
-        for user in test_users:
-            # Test login even if user already has token (from registration)
+        self.logger.info("Creating test users for login test")
+        login_test_users = []
+        
+        # Create 2 test users
+        for i in range(2):
+            session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            from config import TestUser
+            user = TestUser(
+                username=f'login_user_{i}_{session_id}',
+                email=f'login_{i}_{session_id}@example.com',
+                password=f'loginpass{i}123'
+            )
+            login_test_users.append(user)
+            
+            # Register user first
+            self.logger.info(f"Registering user for login test: {user.email}")
+            register_response = self.make_request("POST", "/auth/register", {
+                "username": user.username,
+                "email": user.email,
+                "password": user.password
+            })
+            
+            if register_response.status_code != 201:
+                self.logger.warning(f"Failed to register user for login test: {user.email} - {register_response.text}")
+                continue
+                
+            # Store the registration token
+            user.token = register_response.json().get("token")
+            test_data_manager.track_user(user.__dict__)
+        
+        # Now test login for the newly registered users
+        self.logger.info(f"Testing login for {len(login_test_users)} newly registered users")
+        
+        for user in login_test_users:
             self.logger.info(f"Testing login for user: {user.email}")
             
+            # Try login with email (more reliable)
             response = self.make_request("POST", "/auth/login", {
-                "username": user.username,  # Try username instead of email
+                "email": user.email,
                 "password": user.password
             })
             
             if response.status_code != 200:
-                # Try with email if username fails
+                # Try with username as fallback
+                self.logger.info(f"Login with email failed, trying username instead for: {user.username}")
                 response = self.make_request("POST", "/auth/login", {
-                    "email": user.email,
+                    "username": user.username,
                     "password": user.password
                 })
             
@@ -92,6 +128,10 @@ class AuthTests(BaseTestCase):
             
             # Update token with login result
             user.token = data["token"]
+            self.logger.info(f"Successfully logged in user: {user.email}")
+            
+            # Save this user in our dynamic_users list for other tests that might need it
+            self.dynamic_users.append(user)
         
         self.logger.info("✅ User login test passed")
     
@@ -99,25 +139,75 @@ class AuthTests(BaseTestCase):
         """Test accessing protected endpoint with valid token"""
         self.logger.info("Testing protected endpoint access")
         
-        for user in TEST_USERS:
-            self.logger.info(f"Testing protected access for: {user.email}")
-            
-            response = self.make_request("GET", "/auth/me", token=user.token)
-            
-            if response.status_code == 404 or response.status_code == 501 or (response.status_code == 200 and "Not implemented" in response.text):
-                self.logger.info("/auth/me endpoint not implemented - skipping")
-                break
-                
-            self.assert_response(response, 200, f"Protected access failed for {user.email}")
-            
-            # Verify response structure
-            data = response.json()
-            self.verify_json_structure(data, ["id", "username", "email", "created_at"])
-            
-            # Verify user data matches
-            assert data["email"] == user.email, f"Email mismatch for {user.email}"
-            assert data["username"] == user.username, f"Username mismatch for {user.username}"
+        # Create a user specifically for testing protected endpoint
+        import random
+        import string
         
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'protected_user_{session_id}',
+            email=f'protected_{session_id}@example.com',
+            password=f'protectedpass123'
+        )
+        
+        # Register this user
+        self.logger.info(f"Registering user for protected endpoint test: {user.email}")
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        if register_response.status_code != 201:
+            self.logger.warning(f"Failed to register user for protected endpoint test: {register_response.text}")
+            # Use a test user instead
+            user = TEST_USERS[0]
+        else:
+            # Get token from registration
+            user.token = register_response.json().get("token")
+            test_data_manager.track_user(user.__dict__)
+            self.logger.info(f"User registered successfully with token: {user.token[:10]}...")
+        
+        # Login to get a fresh token
+        self.logger.info(f"Logging in user: {user.email}")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": user.password
+        })
+        
+        if login_response.status_code == 200:
+            user.token = login_response.json()["token"]
+            self.logger.info(f"Successfully logged in with token: {user.token[:10]}...")
+        else:
+            self.logger.warning(f"Login failed with status {login_response.status_code}: {login_response.text}")
+            # We might still have a token from registration, try to use that
+        
+        # Ensure we have a token to use
+        if not hasattr(user, 'token') or not user.token:
+            self.logger.error("No valid token available for protected endpoint test")
+            raise AssertionError("Could not obtain a valid token for protected endpoint test")
+        
+        # Access protected endpoint with token
+        self.logger.info(f"Accessing protected endpoint with token for user: {user.email}")
+        response = self.make_request("GET", "/auth/me", token=user.token)
+        self.logger.info(f"Protected endpoint response: {response.status_code} - {response.text}")
+        
+        if response.status_code == 404 or response.status_code == 501 or (response.status_code == 200 and "Not implemented" in response.text):
+            self.logger.info("/auth/me endpoint not implemented - skipping")
+            return
+            
+        self.assert_response(response, 200, f"Protected access failed for {user.email}")
+        
+        # Verify response structure
+        data = response.json()
+        self.verify_json_structure(data, ["id", "username", "email", "created_at"])
+        
+        # Verify user data matches
+        assert data["email"] == user.email, f"Email mismatch for {user.email}"
+        assert data["username"] == user.username, f"Username mismatch for {user.username}"
+        
+        self.logger.info(f"Successfully verified protected endpoint access for user {user.email}")
         self.logger.info("✅ Protected endpoint test passed")
     
     def test_invalid_login(self):
@@ -240,9 +330,12 @@ class AuthTests(BaseTestCase):
         """Run all authentication tests"""
         self.logger.info("=== Running Auth Tests ===")
         
-        self.test_user_registration()
-        self.test_user_login()
-        self.test_protected_endpoint()
+        # Tests that create and use dynamic users
+        self.test_user_registration()     # Creates dynamic users
+        self.test_user_login()            # Uses dynamic users from registration
+        self.test_protected_endpoint()    # Uses dynamic users with valid tokens
+        
+        # Other tests that use TEST_USERS
         self.test_invalid_login()
         self.test_invalid_token()
         self.test_registration_validation()
