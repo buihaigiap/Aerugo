@@ -30,3 +30,4 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls", "postgr
 uuid = { version = "1.6", features = ["serde", "v4"] }
 argon2 = "0.5"
 jsonwebtoken = "9.2"
+thiserror = "1.0"
