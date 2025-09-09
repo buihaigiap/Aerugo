@@ -1,4 +1,4 @@
 // Models module
 pub mod image;
+pub mod organizations;
 pub mod user;
-pub mod organization;
