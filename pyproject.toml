@@ -1,0 +1,50 @@
+[tool.pytest.ini_options]
+# Pytest configuration for Aerugo integration tests
+
+# Test discovery
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py", "integration_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Output options
+addopts = [
+    "-v",                    # verbose output
+    "--tb=short",           # shorter traceback format
+    "--strict-markers",     # strict marker handling
+    "--strict-config",      # strict config handling
+    "--color=yes",          # colored output
+    "--durations=10",       # show slowest 10 tests
+    "--maxfail=5",          # stop after 5 failures
+]
+
+# Markers
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "auth: marks tests related to authentication",
+    "organizations: marks tests related to organizations",
+    "users: marks tests related to users",
+    "repositories: marks tests related to repositories",
+    "health: marks tests related to health checks",
+    "requires_services: marks tests that require external services (PostgreSQL, Redis, MinIO)",
+]
+
+# Logging
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+# Warnings
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# Test timeout (in seconds)
+timeout = 300
+
+# Minimum version
+minversion = "6.0"

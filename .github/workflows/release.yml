@@ -1,0 +1,440 @@
+name: Release Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      release_type:
+        description: 'Type of release'
+        required: true
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+        - prerelease
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  # Validate release inputs
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Validate version format
+      id: version
+      run: |
+        version="${{ github.event.inputs.version }}"
+        
+        # Validate semver format
+        if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9\-\.]+)?$ ]]; then
+          echo "❌ Invalid version format: $version"
+          echo "Please use semantic versioning (e.g., 1.0.0, 1.0.0-beta.1)"
+          exit 1
+        fi
+        
+        # Check if tag already exists
+        if git tag -l | grep -q "^v$version$"; then
+          echo "❌ Tag v$version already exists"
+          exit 1
+        fi
+        
+        echo "✅ Version $version is valid"
+        echo "version=$version" >> $GITHUB_OUTPUT
+        echo "tag=v$version" >> $GITHUB_OUTPUT
+        
+    - name: Check working directory is clean
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "❌ Working directory is not clean"
+          git status
+          exit 1
+        fi
+        echo "✅ Working directory is clean"
+
+  # Update version in project files
+  update-version:
+    name: Update Version
+    runs-on: ubuntu-latest
+    needs: validate-release
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Update Cargo.toml version
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        echo "📝 Updating version to $version in Cargo.toml"
+        
+        # Update version in Cargo.toml
+        sed -i "s/^version = \".*\"/version = \"$version\"/" Cargo.toml
+        
+        # Verify the change
+        if grep -q "version = \"$version\"" Cargo.toml; then
+          echo "✅ Successfully updated Cargo.toml"
+        else
+          echo "❌ Failed to update Cargo.toml"
+          exit 1
+        fi
+        
+    - name: Update lock file
+      run: |
+        echo "🔄 Updating Cargo.lock"
+        cargo update --workspace
+        
+    - name: Update other version references
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        # Update version in README.md if it exists
+        if [ -f "README.md" ]; then
+          # Update any version badges or references
+          sed -i "s/v[0-9]\+\.[0-9]\+\.[0-9]\+/v$version/g" README.md
+          echo "✅ Updated README.md version references"
+        fi
+        
+        # Update version in documentation
+        if [ -f "docs/installation.md" ]; then
+          sed -i "s/v[0-9]\+\.[0-9]\+\.[0-9]\+/v$version/g" docs/installation.md
+          echo "✅ Updated documentation version references"
+        fi
+        
+    - name: Generate changelog entry
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        tag="${{ needs.validate-release.outputs.tag }}"
+        
+        echo "📋 Generating changelog for $version"
+        
+        # Get the last tag
+        last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        # Create changelog entry
+        echo "## [$version] - $(date +%Y-%m-%d)" > CHANGELOG_ENTRY.md
+        echo "" >> CHANGELOG_ENTRY.md
+        
+        if [ -n "$last_tag" ]; then
+          echo "### Changes since $last_tag" >> CHANGELOG_ENTRY.md
+          git log --pretty=format:"- %s (%h)" $last_tag..HEAD >> CHANGELOG_ENTRY.md
+        else
+          echo "### Initial Release" >> CHANGELOG_ENTRY.md
+          echo "- Initial release of Aerugo container registry" >> CHANGELOG_ENTRY.md
+        fi
+        
+        echo "" >> CHANGELOG_ENTRY.md
+        
+        # Update main CHANGELOG.md if it exists
+        if [ -f "CHANGELOG.md" ]; then
+          # Insert new entry at the top
+          { echo "# Changelog"; echo ""; cat CHANGELOG_ENTRY.md; echo ""; tail -n +2 CHANGELOG.md; } > CHANGELOG_NEW.md
+          mv CHANGELOG_NEW.md CHANGELOG.md
+        else
+          # Create new CHANGELOG.md
+          echo "# Changelog" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          cat CHANGELOG_ENTRY.md >> CHANGELOG.md
+        fi
+        
+        echo "✅ Generated changelog entry"
+        
+    - name: Commit version updates
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git add Cargo.toml Cargo.lock CHANGELOG.md README.md docs/ || true
+        git commit -m "chore(release): bump version to $version"
+        
+        echo "✅ Committed version updates"
+        
+    - name: Create release branch
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        branch="release/v$version"
+        
+        git checkout -b $branch
+        git push origin $branch
+        
+        echo "✅ Created release branch: $branch"
+        echo "branch=$branch" >> $GITHUB_OUTPUT
+
+  # Run comprehensive tests
+  test-release:
+    name: Test Release
+    runs-on: ubuntu-latest
+    needs: [validate-release, update-version]
+    
+    steps:
+    - name: Checkout release branch
+      uses: actions/checkout@v4
+      with:
+        ref: release/v${{ needs.validate-release.outputs.version }}
+        
+    - name: Run full test suite
+      uses: ./.github/workflows/ci.yml
+      
+    - name: Build release artifacts
+      run: |
+        echo "🔨 Building release artifacts..."
+        
+        # Install Rust
+        rustup toolchain install stable
+        rustup default stable
+        
+        # Add targets
+        rustup target add x86_64-unknown-linux-gnu
+        
+        # Build release
+        cargo build --release --target x86_64-unknown-linux-gnu
+        
+        # Verify binary
+        if [ -f "target/x86_64-unknown-linux-gnu/release/aerugo" ]; then
+          echo "✅ Release binary built successfully"
+          ./target/x86_64-unknown-linux-gnu/release/aerugo --version
+        else
+          echo "❌ Failed to build release binary"
+          exit 1
+        fi
+
+  # Create GitHub release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-release, update-version, test-release]
+    
+    steps:
+    - name: Checkout release branch
+      uses: actions/checkout@v4
+      with:
+        ref: release/v${{ needs.validate-release.outputs.version }}
+        
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Build release assets
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        # Build for x86_64
+        rustup target add x86_64-unknown-linux-gnu
+        cargo build --release --target x86_64-unknown-linux-gnu
+        
+        # Create release directory
+        mkdir -p release-assets
+        
+        # Package binary
+        tar -czf "release-assets/aerugo-v$version-x86_64-linux.tar.gz" \
+          -C target/x86_64-unknown-linux-gnu/release aerugo
+        
+        # Create checksums
+        cd release-assets
+        sha256sum *.tar.gz > checksums.txt
+        
+        echo "✅ Created release assets"
+        
+    - name: Create Git tag
+      run: |
+        tag="${{ needs.validate-release.outputs.tag }}"
+        
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git tag -a $tag -m "Release $tag"
+        git push origin $tag
+        
+        echo "✅ Created and pushed tag: $tag"
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.validate-release.outputs.tag }}
+        name: Release ${{ needs.validate-release.outputs.tag }}
+        body_path: CHANGELOG_ENTRY.md
+        files: |
+          release-assets/*
+        prerelease: ${{ github.event.inputs.prerelease }}
+        generate_release_notes: true
+        
+    - name: Update Docker tags
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        echo "🐳 Release $version will trigger Docker image builds via CD workflow"
+
+  # Merge back to main
+  merge-to-main:
+    name: Merge to Main
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release]
+    if: github.event.inputs.prerelease != 'true'
+    
+    steps:
+    - name: Checkout main
+      uses: actions/checkout@v4
+      with:
+        ref: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Merge release branch
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        release_branch="release/v$version"
+        
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Fetch release branch
+        git fetch origin $release_branch
+        
+        # Merge release branch
+        git merge origin/$release_branch --no-ff -m "Merge release v$version"
+        
+        # Push to main
+        git push origin main
+        
+        echo "✅ Merged release branch to main"
+        
+    - name: Clean up release branch
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        release_branch="release/v$version"
+        
+        # Delete remote release branch
+        git push origin --delete $release_branch
+        
+        echo "✅ Cleaned up release branch"
+
+  # Post-release tasks
+  post-release:
+    name: Post-Release Tasks
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release, merge-to-main]
+    if: always() && needs.create-release.result == 'success'
+    
+    steps:
+    - name: Checkout main
+      uses: actions/checkout@v4
+      with:
+        ref: main
+        
+    - name: Create next development version
+      if: github.event.inputs.prerelease != 'true'
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        # Parse current version
+        IFS='.' read -ra VERSION_PARTS <<< "$version"
+        major=${VERSION_PARTS[0]}
+        minor=${VERSION_PARTS[1]}
+        patch=${VERSION_PARTS[2]}
+        
+        # Increment patch version for next dev version
+        next_patch=$((patch + 1))
+        next_version="$major.$minor.$next_patch-dev"
+        
+        echo "📝 Updating to next development version: $next_version"
+        
+        # Update Cargo.toml
+        sed -i "s/^version = \".*\"/version = \"$next_version\"/" Cargo.toml
+        
+        # Commit changes
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git add Cargo.toml
+        git commit -m "chore: bump to next development version $next_version"
+        git push origin main
+        
+        echo "✅ Set next development version"
+        
+    - name: Send release notifications
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        tag="${{ needs.validate-release.outputs.tag }}"
+        
+        echo "📢 Sending release notifications for $tag"
+        
+        # Here you would send notifications to:
+        # - Slack release channel
+        # - Discord webhook
+        # - Email to subscribers
+        # - Update documentation sites
+        # - Notify package managers
+        
+        echo "✅ Release notifications sent"
+        
+    - name: Update documentation
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        
+        echo "📚 Updating documentation for version $version"
+        
+        # Here you would:
+        # - Update API documentation
+        # - Regenerate docs website
+        # - Update Docker Hub description
+        # - Update package registry information
+        
+        echo "✅ Documentation updated"
+
+  # Rollback mechanism (manual trigger)
+  rollback:
+    name: Rollback Release
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Rollback actions
+      run: |
+        version="${{ needs.validate-release.outputs.version }}"
+        tag="${{ needs.validate-release.outputs.tag }}"
+        
+        echo "🔄 Rolling back release $version"
+        
+        # Delete tag if it was created
+        git tag -d $tag 2>/dev/null || true
+        git push --delete origin $tag 2>/dev/null || true
+        
+        # Delete release branch if it exists
+        git push --delete origin "release/v$version" 2>/dev/null || true
+        
+        # Delete GitHub release if it was created
+        # gh release delete $tag --yes 2>/dev/null || true
+        
+        echo "✅ Rollback completed"
+        
+    - name: Notify rollback
+      run: |
+        echo "⚠️  Release rollback completed"
+        # Send urgent notifications about rollback

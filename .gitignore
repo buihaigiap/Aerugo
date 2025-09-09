@@ -14,6 +14,20 @@ Cargo.lock
 # Environment files
 .env
 .env.local
+.env.backup.*
+
+# Python test environment
+venv-test/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs and temporary files
+*.log
+*.tmp
+*debug*
+*backup*
 
 # Local config overrides
 config/local.yml

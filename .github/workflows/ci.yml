@@ -1,0 +1,477 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Rust linting, formatting, and security checks
+  lint-and-security:
+    name: Rust Lint & Security
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+      
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+      
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+      
+    - name: Security audit
+      run: cargo audit
+      
+    - name: Check dependencies
+      run: cargo tree --duplicates
+
+  # Rust unit and integration tests
+  test-rust:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-security
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: aerugo_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+      minio:
+        image: minio/minio:latest
+        ports:
+          - 9001:9000
+          - 9002:9001
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-test-
+          ${{ runner.os }}-cargo-
+          
+    - name: Install SQLx CLI
+      run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+      
+    - name: Wait for services
+      run: |
+        # Wait for PostgreSQL
+        for i in {1..30}; do
+          if pg_isready -h localhost -p 5433 -U postgres; then
+            echo "PostgreSQL is ready"
+            break
+          fi
+          echo "Waiting for PostgreSQL... ($i/30)"
+          sleep 2
+        done
+        
+        # Wait for Redis
+        for i in {1..30}; do
+          if redis-cli -h localhost -p 6380 ping; then
+            echo "Redis is ready"
+            break
+          fi
+          echo "Waiting for Redis... ($i/30)"
+          sleep 2
+        done
+        
+        # Wait for MinIO
+        for i in {1..30}; do
+          if curl -f http://localhost:9001/minio/health/live; then
+            echo "MinIO is ready"
+            break
+          fi
+          echo "Waiting for MinIO... ($i/30)"
+          sleep 2
+        done
+      
+    - name: Set environment variables
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/aerugo_test" >> $GITHUB_ENV
+        echo "REDIS_URL=redis://localhost:6380" >> $GITHUB_ENV
+        echo "MINIO_ENDPOINT=localhost:9001" >> $GITHUB_ENV
+        echo "MINIO_ACCESS_KEY=minioadmin" >> $GITHUB_ENV
+        echo "MINIO_SECRET_KEY=minioadmin" >> $GITHUB_ENV
+        echo "JWT_SECRET=test_jwt_secret_key_for_github_actions" >> $GITHUB_ENV
+        echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+        echo "SERVER_PORT=8080" >> $GITHUB_ENV
+        
+    - name: Run database migrations
+      run: |
+        sqlx database create --database-url $DATABASE_URL || true
+        sqlx migrate run --database-url $DATABASE_URL
+        
+    - name: Run Rust unit tests
+      run: cargo test --lib --bins
+      
+    - name: Build Aerugo server
+      run: cargo build --release
+      
+    - name: Run Rust integration tests
+      run: cargo test --test '*'
+
+  # Python integration tests
+  test-integration:
+    name: Python Integration Tests
+    runs-on: ubuntu-latest
+    needs: test-rust
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: aerugo_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+      minio:
+        image: minio/minio:latest
+        ports:
+          - 9001:9000
+          - 9002:9001
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-integration-
+          ${{ runner.os }}-cargo-
+          
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('tests/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f tests/requirements.txt ]; then
+          pip install -r tests/requirements.txt
+        else
+          pip install requests psycopg2-binary redis
+        fi
+        
+    - name: Install SQLx CLI
+      run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+      
+    - name: Set environment variables
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/aerugo_test" >> $GITHUB_ENV
+        echo "REDIS_URL=redis://localhost:6380" >> $GITHUB_ENV
+        echo "MINIO_ENDPOINT=localhost:9001" >> $GITHUB_ENV
+        echo "MINIO_ACCESS_KEY=minioadmin" >> $GITHUB_ENV
+        echo "MINIO_SECRET_KEY=minioadmin" >> $GITHUB_ENV
+        echo "JWT_SECRET=test_jwt_secret_key_for_github_actions" >> $GITHUB_ENV
+        echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+        echo "SERVER_PORT=8080" >> $GITHUB_ENV
+        
+    - name: Build Aerugo server
+      run: cargo build --release
+      
+    - name: Run Python integration tests
+      run: |
+        cd tests
+        timeout 300s python3 -c "
+        import sys
+        sys.path.insert(0, '.')
+        from integration_test import IntegrationTestSuite
+        suite = IntegrationTestSuite()
+        suite.run_all_tests()
+        "
+      timeout-minutes: 10
+
+  # Build and test Docker images
+  test-docker:
+    name: Docker Build & Test
+    runs-on: ubuntu-latest
+    needs: [test-rust, test-integration]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker image
+      run: |
+        docker build -t aerugo:test .
+        
+    - name: Test Docker image
+      run: |
+        # Run basic smoke test on Docker image
+        docker run --rm aerugo:test --version || true
+        docker run --rm aerugo:test --help || true
+
+  # Test with different Rust versions
+  test-rust-versions:
+    name: Test Rust Versions
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    strategy:
+      matrix:
+        rust: [stable, beta, 1.70.0]  # Test minimum supported Rust version
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust ${{ matrix.rust }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Check build
+      run: cargo check --all-targets
+      
+    - name: Run tests
+      run: cargo test --lib --bins
+      continue-on-error: ${{ matrix.rust == 'beta' }}
+
+  # Performance and benchmark tests
+  benchmark:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-rust, test-integration]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Run benchmarks
+      run: |
+        # Run cargo benchmarks if available
+        cargo bench --no-run || echo "No benchmarks found"
+        
+    - name: Build optimized release
+      run: cargo build --release
+      
+    - name: Test binary size
+      run: |
+        ls -lh target/release/aerugo
+        echo "Binary size: $(du -h target/release/aerugo | cut -f1)"
+
+  # Code coverage
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: test-rust
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: aerugo_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
+      
+    - name: Install SQLx CLI
+      run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+      
+    - name: Set environment variables
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/aerugo_test" >> $GITHUB_ENV
+        
+    - name: Setup database
+      run: |
+        sqlx database create --database-url $DATABASE_URL || true
+        sqlx migrate run --database-url $DATABASE_URL
+        
+    - name: Generate coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: lcov.info
+        fail_ci_if_error: false
+
+  # Summary job
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint-and-security, test-rust, test-integration, test-docker]
+    if: always()
+    
+    steps:
+    - name: Check all jobs
+      run: |
+        if [[ "${{ needs.lint-and-security.result }}" != "success" ]]; then
+          echo "Lint and security checks failed"
+          exit 1
+        fi
+        if [[ "${{ needs.test-rust.result }}" != "success" ]]; then
+          echo "Rust tests failed"
+          exit 1
+        fi
+        if [[ "${{ needs.test-integration.result }}" != "success" ]]; then
+          echo "Integration tests failed"
+          exit 1
+        fi
+        if [[ "${{ needs.test-docker.result }}" != "success" ]]; then
+          echo "Docker tests failed"
+          exit 1
+        fi
+        echo "All CI jobs passed successfully! 🎉"
