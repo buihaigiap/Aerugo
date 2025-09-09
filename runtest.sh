@@ -3,6 +3,63 @@
 # Aerugo Python Integration Tests Runner
 set -e
 
+# Help function
+show_help() {
+    echo "Usage: $0 [OPTIONS] [TEST_FILE]"
+    echo
+    echo "Options:"
+    echo "  -h, --help        Show this help message"
+    echo "  -v, --verbose     Run tests in verbose mode"
+    echo "  -q, --quiet       Run tests in quiet mode"
+    echo "  -c, --coverage    Run tests with coverage report"
+    echo "  --no-server       Don't start the Aerugo server (use if you already have one running)"
+    echo "  --services-only   Start required services and exit (don't run tests)"
+    echo
+    echo "Examples:"
+    echo "  $0                          # Run all tests via pytest wrapper"
+    echo "  $0 -v                       # Run all tests verbosely"
+    echo "  $0 -c                       # Run with coverage report"
+    echo "  $0 --no-server              # Don't start the Aerugo server"
+    echo "  $0 --services-only          # Only ensure services are running, then exit"
+    echo "  $0 pytest_integration.py    # Run pytest integration wrapper"
+    echo "  $0 run_all_tests.py         # Run direct test runner"
+    echo
+    echo "Direct pytest usage:"
+    echo "  pytest tests/pytest_integration.py     # Run via pytest directly"
+    echo "  python tests/run_all_tests.py          # Run direct test runner"
+    echo
+    echo "Test files are in the '$TEST_DIR' directory."
+    echo "The script will automatically setup a virtual environment and install dependencies."
+    echo "It will also ensure required services (PostgreSQL, Redis, MinIO) and the Aerugo server are running."
+}
+
+# Initialize options
+NO_SERVER=false
+SERVICES_ONLY=false
+
+# Process command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-server)
+            NO_SERVER=true
+            shift
+            ;;
+        --services-only)
+            SERVICES_ONLY=true
+            shift
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        *)
+            # Only process the server-related arguments here
+            # Other arguments will be processed by the main function
+            shift
+            ;;
+    esac
+done
+
 echo "🧪 Aerugo Python Integration Tests Runner"
 echo "========================================"
 
@@ -100,29 +157,130 @@ check_test_directory() {
     print_success "Test directory found"
 }
 
-# Check services availability
+# Check services availability and start them if needed
 check_services() {
-    print_status "Checking service availability..."
+    print_status "Checking service availability and starting if needed..."
+    
+    # Check if dev script exists
+    if [ ! -f "./scripts/dev.sh" ]; then
+        print_error "Development script not found at ./scripts/dev.sh"
+        exit 1
+    fi
     
     # Check PostgreSQL
     if timeout 5 bash -c "</dev/tcp/localhost/5433" 2>/dev/null; then
         print_success "PostgreSQL (port 5433) is available"
+        POSTGRES_RUNNING=true
     else
-        print_warning "PostgreSQL (port 5433) is not available"
+        print_warning "PostgreSQL (port 5433) is not available. Starting it..."
+        POSTGRES_RUNNING=false
     fi
     
     # Check Redis
     if timeout 5 bash -c "</dev/tcp/localhost/6380" 2>/dev/null; then
         print_success "Redis (port 6380) is available"
+        REDIS_RUNNING=true
     else
-        print_warning "Redis (port 6380) is not available"
+        print_warning "Redis (port 6380) is not available. Starting it..."
+        REDIS_RUNNING=false
     fi
     
     # Check MinIO
     if timeout 5 bash -c "</dev/tcp/localhost/9001" 2>/dev/null; then
         print_success "MinIO (port 9001) is available"
+        MINIO_RUNNING=true
     else
-        print_warning "MinIO (port 9001) is not available"
+        print_warning "MinIO (port 9001) is not available. Starting it..."
+        MINIO_RUNNING=false
+    fi
+    
+    # If any service is not running, start all of them
+    if [ "$POSTGRES_RUNNING" = "false" ] || [ "$REDIS_RUNNING" = "false" ] || [ "$MINIO_RUNNING" = "false" ]; then
+        print_status "Starting required services with dev.sh..."
+        ./scripts/dev.sh start
+        
+        # Wait for services to fully start
+        print_status "Waiting for services to start..."
+        sleep 5
+        
+        # Verify services are now running
+        local all_services_running=true
+        
+        if ! timeout 5 bash -c "</dev/tcp/localhost/5433" 2>/dev/null; then
+            print_error "PostgreSQL (port 5433) failed to start"
+            all_services_running=false
+        fi
+        
+        if ! timeout 5 bash -c "</dev/tcp/localhost/6380" 2>/dev/null; then
+            print_error "Redis (port 6380) failed to start"
+            all_services_running=false
+        fi
+        
+        if ! timeout 5 bash -c "</dev/tcp/localhost/9001" 2>/dev/null; then
+            print_error "MinIO (port 9001) failed to start"
+            all_services_running=false
+        fi
+        
+        if [ "$all_services_running" = "false" ]; then
+            print_error "Some services failed to start. Please check the logs and start them manually."
+            print_status "You can use: ./scripts/dev.sh start"
+            exit 1
+        else
+            print_success "All required services are now running"
+        fi
+    fi
+    
+    # If services-only option is provided, exit after starting services
+    if [ "$SERVICES_ONLY" = "true" ]; then
+        print_success "Services are now running. Exiting as requested."
+        exit 0
+    fi
+    
+    # Check Aerugo server (port 8080) if not disabled
+    if [ "$NO_SERVER" = "true" ]; then
+        print_status "Skipping Aerugo server check (--no-server option provided)"
+        
+        # Still verify it's actually running
+        if timeout 5 bash -c "</dev/tcp/localhost/8080" 2>/dev/null; then
+            print_success "Aerugo server (port 8080) is available"
+        else
+            print_warning "Aerugo server (port 8080) is not available. Tests will likely fail."
+            print_warning "If you want to automatically start the server, remove the --no-server option."
+        fi
+    else
+        if timeout 5 bash -c "</dev/tcp/localhost/8080" 2>/dev/null; then
+            print_success "Aerugo server (port 8080) is available"
+        else
+            print_warning "Aerugo server (port 8080) is not available. Starting it..."
+            
+            # Start the Aerugo server in the background
+            print_status "Starting Aerugo server..."
+            nohup cargo run > aerugo-server.log 2>&1 &
+            AERUGO_PID=$!
+            
+            # Save PID to file for later cleanup
+            echo $AERUGO_PID > .aerugo-server-pid
+            
+            # Wait for server to start
+            print_status "Waiting for Aerugo server to start (this may take up to 20 seconds)..."
+            local server_ready=false
+            for i in {1..20}; do
+                if timeout 1 bash -c "</dev/tcp/localhost/8080" 2>/dev/null; then
+                    server_ready=true
+                    break
+                fi
+                echo -n "."
+                sleep 1
+            done
+            echo ""
+            
+            if [ "$server_ready" = "false" ]; then
+                print_error "Aerugo server failed to start in time. Please check aerugo-server.log for details."
+                exit 1
+            else
+                print_success "Aerugo server is now running (PID: $AERUGO_PID)"
+            fi
+        fi
     fi
 }
 
@@ -181,10 +339,39 @@ run_tests() {
 # Cleanup function
 cleanup() {
     print_status "Cleaning up..."
+    
+    # Deactivate Python virtual environment
     deactivate 2>/dev/null || true
+    
+    # Check if we started the Aerugo server
+    if [ -f ".aerugo-server-pid" ]; then
+        local server_pid=$(cat .aerugo-server-pid)
+        if ps -p $server_pid > /dev/null; then
+            print_status "Stopping Aerugo server (PID: $server_pid)..."
+            kill $server_pid
+            sleep 2
+            # Make sure it's really stopped
+            if ps -p $server_pid > /dev/null; then
+                print_warning "Aerugo server didn't stop gracefully, forcing..."
+                kill -9 $server_pid 2>/dev/null || true
+            fi
+            print_success "Aerugo server stopped"
+        fi
+        rm .aerugo-server-pid
+    fi
+    
     # Optionally remove virtual environment
     # rm -rf "$VENV_DIR"
+    
     print_success "Cleanup completed"
+}
+
+# Handle Ctrl+C and other termination signals
+handle_interrupt() {
+    echo
+    print_warning "Test execution interrupted"
+    cleanup
+    exit 130
 }
 
 # Main execution
@@ -192,8 +379,11 @@ main() {
     echo
     print_status "Starting test execution..."
     
-    # Set trap for cleanup
+    # Set trap for cleanup on normal exit
     trap cleanup EXIT
+    
+    # Set trap for interruption (Ctrl+C)
+    trap handle_interrupt INT TERM
     
     # Execute steps
     check_prerequisites
@@ -218,36 +408,11 @@ main() {
     fi
 }
 
-# Help function
-show_help() {
-    echo "Usage: $0 [OPTIONS] [TEST_FILE]"
-    echo
-    echo "Options:"
-    echo "  -h, --help      Show this help message"
-    echo "  -v, --verbose   Run tests in verbose mode"
-    echo "  -q, --quiet     Run tests in quiet mode"
-    echo "  -c, --coverage  Run tests with coverage report"
-    echo
-    echo "Examples:"
-    echo "  $0                          # Run all tests via pytest wrapper"
-    echo "  $0 -v                       # Run all tests verbosely"
-    echo "  $0 -c                       # Run with coverage report"
-    echo "  $0 pytest_integration.py   # Run pytest integration wrapper"
-    echo "  $0 run_all_tests.py        # Run direct test runner"
-    echo
-    echo "Direct pytest usage:"
-    echo "  pytest tests/pytest_integration.py     # Run via pytest directly"
-    echo "  python tests/run_all_tests.py          # Run direct test runner"
-    echo
-    echo "Test files are in the '$TEST_DIR' directory."
-    echo "The script will automatically setup a virtual environment and install dependencies."
-}
 
-# Check for help flag
-if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    show_help
-    exit 0
-fi
+
+# Export variables for check_services function
+export NO_SERVER
+export SERVICES_ONLY
 
 # Run main function
 main "$@"

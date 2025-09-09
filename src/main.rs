@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         .with_state(state);
 
     // Run it
-    let listen_address = format!("{}:{}", settings.server.bind_address, settings.server.port);
+    let listen_address = settings.server.bind_address.clone();
     let addr: std::net::SocketAddr = listen_address.parse()?;
     tracing::info!("listening on {}", addr);
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
