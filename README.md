@@ -1,10 +1,13 @@
 # Aerugo
 
-[![CI/CD](https://github.com/AI-Decenter/Aerugo/actions/workflows/main.yml/badge.svg)](https://github.com/AI-Decenter/Aerugo/actions/workflows/main.yml)
+[![CI/CD](https://github.com/AI-Decenter/Aerugo/actions/workflows/ci.yml/badge.svg)](https://github.com/AI-Decenter/Aerugo/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Project Status: Active](https://img.shields.io/badge/Project%20Status-Active-green.svg)](https://github.com/AI-Decenter/Aerugo/)
 
 **Aerugo** is a next-generation, distributed, and multi-tenant container registry built with Rust. It is designed for high performance, security, and scalability, leveraging an S3-compatible object storage backend for infinite scalability of container images.
+
+> **Project Status (September 2025)**: Aerugo is actively under development. Core features including authentication, user management, organization management, and repository management are complete. Registry API implementation is in progress.
 
 ## 📋 Table of Contents
 
@@ -27,7 +30,69 @@
 - **🐳 Docker Registry V2 API Compliant:** Fully compatible with the Docker client and other OCI-compliant tools
 - **🚀 Modern Management API:** A separate, clean RESTful API for programmatic management of users, organizations, repositories, and permissions
 
+## 📊 Implementation Status
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Configuration System | ✅ Complete | Environment variables, config files, validation |
+| Database Layer | ✅ Complete | Schema design, migrations, models, and query functionality |
+| Authentication | ✅ Complete | JWT tokens, login/registration, permissions system |
+| User Management | ✅ Complete | User profiles, password management, search |
+| Organization Management | ✅ Complete | Create/update/delete orgs, member management |
+| Repository Management | ✅ Complete | Create/update/delete repos, access control |
+| Registry API | 🔄 In Progress | Docker Registry V2 API implementation |
+| S3 Storage Integration | 🔄 In Progress | Integration with S3-compatible storage |
+| Cache System | 📝 Planned | Redis-based caching for performance |
+| Metrics & Monitoring | 📝 Planned | Prometheus metrics, health checks, logging |
+| Horizontal Scaling | 📝 Planned | Multi-node cluster support |
+
 ---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Rust 1.70+ and Cargo
+- PostgreSQL 14+
+- Redis 6+
+- MinIO or other S3-compatible storage
+- Docker (optional, for containerized development)
+
+### Quick Start
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/AI-Decenter/Aerugo.git
+   cd Aerugo
+   ```
+
+2. Set up the development environment:
+   ```bash
+   # Run the development setup script
+   ./scripts/setup-dev-env.sh
+   ```
+
+3. Configure the application:
+   ```bash
+   # Copy the default config
+   cp config/default.yml .env
+   
+   # Edit the configuration as needed
+   nano .env
+   ```
+
+4. Run the development server:
+   ```bash
+   # Start the development server
+   ./scripts/dev.sh
+   ```
+
+5. Run tests:
+   ```bash
+   # Run integration tests
+   ./runtest.sh
+   ```
+
+### API Documentation
+The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
 
 ## 🏛️ Architecture
 
