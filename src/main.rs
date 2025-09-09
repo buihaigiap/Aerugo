@@ -35,13 +35,15 @@ async fn main() -> Result<()> {
 
     // Build our application with routes
     let app = Router::new()
+        .route("/health", axum::routing::get(handlers::health::check))
         .nest("/api/v1", routes::api::api_router())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::permissive()) // Add CORS support
         .with_state(state);
 
     // Run it
-    let addr: std::net::SocketAddr = settings.server.bind_address.parse()?;
+    let listen_address = format!("{}:{}", settings.server.bind_address, settings.server.port);
+    let addr: std::net::SocketAddr = listen_address.parse()?;
     tracing::info!("listening on {}", addr);
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
         .await?;

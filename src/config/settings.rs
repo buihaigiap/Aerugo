@@ -1,9 +1,9 @@
+use anyhow::{Context, Result};
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
-use secrecy::{Secret, ExposeSecret};
-use validator::Validate;
 use std::net::SocketAddr;
 use url::Url;
-use anyhow::{Result, Context};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct Settings {
@@ -84,17 +84,21 @@ impl Settings {
             .add_source(config::File::with_name("config/local").required(false))
             // Add in settings from environment variables (with a prefix of APP and '__' as separator)
             // E.g. `APP_SERVER__PORT=5001` would set `Settings.server.port`
-            .add_source(config::Environment::with_prefix("APP")
-                .prefix_separator("_")
-                .separator("__"))
+            .add_source(
+                config::Environment::with_prefix("APP")
+                    .prefix_separator("_")
+                    .separator("__"),
+            )
             .build()
             .context("Failed to build configuration")?;
 
         // Deserialize and validate
-        let settings: Settings = s.try_deserialize()
+        let settings: Settings = s
+            .try_deserialize()
             .context("Failed to deserialize configuration")?;
-        
-        settings.validate_all()
+
+        settings
+            .validate_all()
             .context("Configuration validation failed")?;
 
         Ok(settings)
@@ -118,7 +122,11 @@ impl Settings {
 
 impl DatabaseSettings {
     pub fn connection_string(&self) -> String {
-        let ssl_mode = if self.require_ssl { "require" } else { "prefer" };
+        let ssl_mode = if self.require_ssl {
+            "require"
+        } else {
+            "prefer"
+        };
         format!(
             "postgres://{}:{}@{}:{}/{}?sslmode={}",
             self.username,
