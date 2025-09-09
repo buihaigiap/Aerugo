@@ -11,7 +11,7 @@ pub async fn create_pool(settings: &Settings) -> Result<PgPool> {
         .acquire_timeout(Duration::from_secs(30))
         .idle_timeout(Duration::from_secs(60))
         .max_lifetime(Duration::from_secs(3600))
-        .connect_with(settings.database.connection_string().parse()?)
+        .connect(&settings.database.connection_string())
         .await
         .context("Failed to create database connection pool")?;
 
@@ -69,15 +69,4 @@ pub async fn exists<'a>(pool: &PgPool, table: &str, column: &str, value: &str) -
         .context("Failed to check record existence")?;
 
     Ok(exists)
-}
-
-// Error type for database errors
-#[derive(Debug, thiserror::Error)]
-pub enum DatabaseError {
-    #[error("Record not found")]
-    NotFound,
-    #[error("Record already exists")]
-    AlreadyExists,
-    #[error("Database error: {0}")]
-    Other(#[from] sqlx::Error),
 }

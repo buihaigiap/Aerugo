@@ -13,7 +13,7 @@ pub async fn create_user(
     sqlx::query_as::<_, User>(
         "INSERT INTO users (username, email, password_hash)
          VALUES ($1, $2, $3)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(username)
     .bind(email)
@@ -44,7 +44,7 @@ pub async fn create_organization(
     let org = sqlx::query_as::<_, Organization>(
         "INSERT INTO organizations (name, display_name, description, website_url)
          VALUES ($1, $2, $3, $4)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(name)
     .bind(display_name)
@@ -57,7 +57,7 @@ pub async fn create_organization(
     // Add creator as owner
     sqlx::query(
         "INSERT INTO organization_members (organization_id, user_id, role)
-         VALUES ($1, $2, $3)"
+         VALUES ($1, $2, $3)",
     )
     .bind(org.id)
     .bind(creator_id)
@@ -80,7 +80,7 @@ pub async fn create_repository(
     sqlx::query_as::<_, Repository>(
         "INSERT INTO repositories (organization_id, name, description, visibility)
          VALUES ($1, $2, $3, $4)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(org_id)
     .bind(name)
@@ -103,7 +103,7 @@ pub async fn create_image_metadata(
     sqlx::query_as::<_, ImageMetadata>(
         "INSERT INTO image_metadata (repository_id, digest, manifest, config, size_bytes)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(repo_id)
     .bind(digest)
@@ -132,7 +132,7 @@ pub async fn check_permission(
             AND rp.resource_type = $2
             AND rp.resource_id = $3
             AND p.name = $4
-        )"
+        )",
     )
     .bind(user_id)
     .bind(resource_type.to_string())
@@ -166,7 +166,7 @@ pub async fn check_permission(
                 END
             )
             AND p.name = $4
-        )"
+        )",
     )
     .bind(user_id)
     .bind(resource_type.to_string())
@@ -187,7 +187,7 @@ where
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<R>> + 'b>>,
 {
     let mut tx = pool.begin().await?;
-    
+
     match f(&mut tx).await {
         Ok(result) => {
             tx.commit().await?;

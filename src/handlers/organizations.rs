@@ -452,7 +452,7 @@ async fn get_members_by_org_id_internal(
         JOIN users u ON om.user_id = u.id
         JOIN organizations o ON om.organization_id = o.id
         WHERE o.id = $1
-        ORDER BY om.joined_at ASC"
+        ORDER BY om.joined_at ASC",
     )
     .bind(org_id)
     .fetch_all(pool)

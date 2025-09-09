@@ -1,11 +1,13 @@
-use axum::Router;
 use anyhow::Result;
+use axum::Router;
 
-mod routes;
+mod auth;
+mod config;
+mod database;
+mod db;
 mod handlers;
 mod models;
-mod config;
-mod db;
+mod routes;
 
 use crate::config::settings::Settings;
 
@@ -45,7 +47,6 @@ async fn main() -> Result<()> {
     let listen_address = format!("{}:{}", settings.server.bind_address, settings.server.port);
     let addr: std::net::SocketAddr = listen_address.parse()?;
     tracing::info!("listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
-        .await?;
+    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
     Ok(())
 }
