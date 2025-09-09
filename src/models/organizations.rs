@@ -1,9 +1,10 @@
 // src/models/organization.rs
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use validator::Validate;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct Organization {
     pub id: i64,
     pub name: String,
@@ -24,6 +25,7 @@ pub struct CreateOrganizationRequest {
     #[validate(length(max = 500))]
     pub description: Option<String>,
     pub website_url: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -36,7 +38,7 @@ pub struct UpdateOrganizationRequest {
     pub avatar_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct OrganizationMember {
     pub id: i64,
     pub organization_id: i64,
