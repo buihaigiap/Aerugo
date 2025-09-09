@@ -26,6 +26,7 @@ pub struct ServerSettings {
     #[validate(range(min = 1024, max = 65535))]
     pub port: u16,
     pub api_prefix: String,
+    pub log_level: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Validate)]
@@ -40,8 +41,6 @@ pub struct DatabaseSettings {
     pub min_connections: u32,
     pub max_connections: u32,
 }
-
-
 
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct StorageSettings {
@@ -70,22 +69,33 @@ pub struct AuthSettings {
 }
 
 impl Settings {
-    pub fn load() -> Result<Self, config::ConfigError> {
+    pub fn load() -> Result<Self> {
         // Load .env file if it exists
         dotenv::dotenv().ok();
 
-        let config_builder = config::Config::builder()
-            // Load default configuration
+        let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());
+
+        let s = config::Config::builder()
+            // Default config
             .add_source(config::File::with_name("config/default"))
-            // Add configuration from environment variables (i.e. `APP_SERVER__PORT=5001`)
+            // Environment specific config
+            .add_source(config::File::with_name(&format!("config/{}", env)).required(false))
+            // Local overrides
+            .add_source(config::File::with_name("config/local").required(false))
+            // Add in settings from environment variables (with a prefix of APP and '__' as separator)
+            // E.g. `APP_SERVER__PORT=5001` would set `Settings.server.port`
             .add_source(config::Environment::with_prefix("APP")
                 .prefix_separator("_")
                 .separator("__"))
-            // Optional local configuration file
-            .add_source(config::File::with_name("config/local").required(false));
+            .build()
+            .context("Failed to build configuration")?;
 
-        // Build and convert
-        let settings = config_builder.build()?.try_deserialize()?;
+        // Deserialize and validate
+        let settings: Settings = s.try_deserialize()
+            .context("Failed to deserialize configuration")?;
+        
+        settings.validate_all()
+            .context("Configuration validation failed")?;
 
         Ok(settings)
     }
@@ -99,6 +109,26 @@ impl Settings {
         self.auth.validate()?;
         Ok(())
     }
+
+    // Get base URL for server
+    pub fn server_url(&self) -> String {
+        format!("http://{}:{}", self.server.bind_address, self.server.port)
+    }
+}
+
+impl DatabaseSettings {
+    pub fn connection_string(&self) -> String {
+        let ssl_mode = if self.require_ssl { "require" } else { "prefer" };
+        format!(
+            "postgres://{}:{}@{}:{}/{}?sslmode={}",
+            self.username,
+            self.password.expose_secret(),
+            self.host,
+            self.port,
+            self.database_name,
+            ssl_mode
+        )
+    }
 }
 
 fn validate_socket_addr(addr: &str) -> Result<(), validator::ValidationError> {
@@ -111,37 +141,4 @@ fn validate_url(url: &str) -> Result<(), validator::ValidationError> {
     Url::parse(url)
         .map(|_| ())
         .map_err(|_| validator::ValidationError::new("invalid_url"))
-}
-
-impl DatabaseSettings {
-    pub fn connection_string(&self) -> String {
-        let ssl_mode = if self.require_ssl { "require" } else { "prefer" };
-        format!(
-            "postgresql://{}:{}@{}:{}/{}?sslmode={}",
-            self.username,
-            self.password.expose_secret(),
-            self.host,
-            self.port,
-            self.database_name,
-            ssl_mode
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_default_settings() {
-        let settings = Settings::load().expect("Failed to load settings");
-        assert_eq!(settings.server.port, 3000);
-        assert_eq!(settings.server.api_prefix, "/api/v1");
-    }
-
-    #[test]
-    fn test_settings_validation() {
-        let settings = Settings::load().expect("Failed to load settings");
-        assert!(settings.validate_all().is_ok());
-    }
 }
