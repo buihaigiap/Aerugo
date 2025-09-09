@@ -50,16 +50,15 @@ jobs:
           --health-retries 5
           
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         ports:
           - 9001:9000
           - 9002:9001
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
-        command: ["server", "/data"]
         options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 0"
+          --health-cmd "curl -s http://localhost:9000/minio/health/live || exit 0"
           --health-interval 30s
           --health-timeout 20s
           --health-retries 3
@@ -106,8 +105,8 @@ jobs:
         # Wait for Redis
         redis-cli -h localhost -p 6380 ping
         
-        # Wait for MinIO
-        curl -s http://localhost:9001/minio/health/live || echo "MinIO check bypassed - continuing anyway"
+        # Wait for MinIO - health check at a different endpoint for bitnami image
+        curl -s http://localhost:9001/minio/health/live || curl -s http://localhost:9001/minio/health || echo "MinIO check bypassed - continuing anyway"
         
     - name: Database setup
       run: |
