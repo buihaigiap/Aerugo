@@ -135,14 +135,7 @@ jobs:
     - name: Run tests with our enhanced script
       run: ./runtest.sh --no-server
       
-    - name: Stop Aerugo server
-      run: |
-        if [ -f .aerugo-server-pid ]; then
-          PID=$(cat .aerugo-server-pid)
-          kill $PID || true
-          rm .aerugo-server-pid
-        fi
-      
+         
     # Add a final success message
     - name: Finish
       run: |

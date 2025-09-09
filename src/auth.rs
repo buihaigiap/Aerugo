@@ -11,12 +11,18 @@ pub struct Claims {
 }
 
 pub fn verify_token(token: &str, secret: &[u8]) -> Result<Claims, StatusCode> {
+    tracing::debug!("Verifying token: {}", token);
+    
     let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret),
         &Validation::default()
-    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    ).map_err(|e| {
+        tracing::error!("Token verification error: {:?}", e);
+        StatusCode::UNAUTHORIZED
+    })?;
 
+    tracing::debug!("Token verified successfully for user ID: {}", token_data.claims.sub);
     Ok(token_data.claims)
 }
 
