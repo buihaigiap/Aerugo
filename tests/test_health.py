@@ -17,8 +17,10 @@ class HealthTests(BaseTestCase):
         response = requests.get(f"{SERVER_URL}/health")
         self.assert_response(response, 200, "Health check failed")
         
-        # Verify response content
-        assert response.text.strip() == "OK", f"Unexpected health response: {response.text}"
+        # Verify response content is JSON with status and version
+        response_data = response.json()
+        assert response_data.get("status") == "OK", f"Unexpected health status: {response_data}"
+        assert "version" in response_data, f"Missing version in health response: {response_data}"
         
         self.logger.info("✅ Health check test passed")
     

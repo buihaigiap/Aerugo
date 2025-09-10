@@ -1,5 +1,7 @@
 use anyhow::Result;
 use axum::Router;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod auth;
 mod config;
@@ -7,7 +9,9 @@ mod database;
 mod db;
 mod handlers;
 mod models;
+mod openapi;
 mod routes;
+// mod storage; // Temporarily disabled due to AWS SDK compatibility issues
 
 use crate::config::settings::Settings;
 
@@ -35,10 +39,15 @@ async fn main() -> Result<()> {
         config: settings.clone(),
     };
 
+    // Register API documentation
+    let openapi = openapi::ApiDoc::openapi();
+    
     // Build our application with routes
     let app = Router::new()
         .route("/health", axum::routing::get(handlers::health::check))
         .nest("/api/v1", routes::api::api_router())
+        // Serve Swagger UI
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::permissive()) // Add CORS support
         .with_state(state);

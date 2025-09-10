@@ -1,4 +1,4 @@
-use crate::models::user::{NewUser, User};
+use crate::database::models::{NewUser, User};
 use crate::AppState;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -10,25 +10,36 @@ use axum_extra::TypedHeader;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize)]
+/// User registration request
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct RegisterRequest {
+    /// Username for the new account
     username: String,
+    /// Email address for the new account
     email: String,
+    /// Password for the new account (min 8 characters)
     password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Login request
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// User's email address (either email or username required)
     #[serde(default)]
     email: String,
+    /// Username (either email or username required)
     #[serde(default)]
     username: String,
+    /// User's password
     password: String,
 }
 
-#[derive(Debug, Serialize)]
+/// Authentication response with JWT token
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
+    /// JWT token for authenticating subsequent requests
     token: String,
 }
 
@@ -38,6 +49,18 @@ pub struct Claims {
     pub exp: usize,  // expiration time
 }
 
+/// Register a new user
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User successfully registered", body = AuthResponse),
+        (status = 409, description = "User already exists"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
@@ -132,6 +155,18 @@ pub async fn register(
     )
 }
 
+/// Login with username or email and password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponse),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,

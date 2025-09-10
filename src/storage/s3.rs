@@ -1,8 +1,23 @@
 use super::{BlobMetadata, Storage, StorageConfig};
 use anyhow::Result;
-use async_trait::async_trait;
-use aws_sdk_s3::config::{BehaviorVersion, Credentials};
-use aws_sdk_s3::{Client as S3Client, Region};
+use async_trait:        match self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(response) => {
+                let data = response.body.collect().await?.into_bytes();
+                Ok(Some(data))
+            }
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(None),
+            Err(err) => Err(err.into()),
+        }se aws_sdk_s3::config::{BehaviorVersion, Credentials};
+use aws_config::Region;
+use aws_sdk_s3::{Client as S3Client, primitives::ByteStream};
+use aws_sdk_s3::error::SdkError;
 use bytes::Bytes;
 use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -76,7 +91,7 @@ impl Storage for S3Storage {
             .bucket(&self.bucket)
             .key(digest)
             .content_length(content_length as i64)
-            .body(aws_sdk_s3::types::ByteStream::new(stream))
+            .body(ByteStream::new(stream))
             .send()
             .await?;
         Ok(())
@@ -95,7 +110,7 @@ impl Storage for S3Storage {
                 let data = response.body.collect().await?.into_bytes();
                 Ok(Some(data))
             }
-            Err(err) if err.is_no_such_key() => Ok(None),
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
@@ -116,7 +131,7 @@ impl Storage for S3Storage {
                 let stream = response.body;
                 Ok(Some(Box::new(stream.into_async_read())))
             }
-            Err(err) if err.is_no_such_key() => Ok(None),
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
@@ -131,7 +146,7 @@ impl Storage for S3Storage {
             .await
         {
             Ok(_) => Ok(true),
-            Err(err) if err.is_no_such_key() => Ok(false),
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(false),
             Err(err) => Err(err.into()),
         }
     }
@@ -146,7 +161,7 @@ impl Storage for S3Storage {
             .await
         {
             Ok(_) => Ok(true),
-            Err(err) if err.is_no_such_key() => Ok(false),
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(false),
             Err(err) => Err(err.into()),
         }
     }
@@ -161,12 +176,12 @@ impl Storage for S3Storage {
             .await
         {
             Ok(response) => Ok(Some(BlobMetadata {
-                size: response.content_length as u64,
+                size: response.content_length.unwrap_or(0) as u64,
                 digest: digest.to_string(),
-                created_at: response.last_modified.unwrap().into(),
+                created_at: response.last_modified.unwrap().to_chrono_utc().unwrap(),
                 content_type: response.content_type,
             })),
-            Err(err) if err.is_no_such_key() => Ok(None),
+            Err(SdkError::ServiceError(err)) if err.err().is_no_such_key() => Ok(None),
             Err(err) => Err(err.into()),
         }
     }

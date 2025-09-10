@@ -19,6 +19,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 aws-sdk-s3 = { version = "1.3", features = ["rt-tokio"] }
 aws-config = "1.0"
 anyhow = "1.0"
+utoipa = { version = "4.2", features = ["chrono"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+utoipa-axum = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 clap = { version = "4.4", features = ["derive"] }
