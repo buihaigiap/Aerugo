@@ -18,6 +18,9 @@ use crate::models::user::UserResponse;
     ),
     components(
         schemas(
+            // Health schemas
+            health::HealthResponse,
+            
             // User schemas
             UserResponse,
             auth::RegisterRequest,
