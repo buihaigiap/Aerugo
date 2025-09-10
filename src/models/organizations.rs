@@ -56,7 +56,7 @@ pub struct UpdateOrganizationRequest {
     pub avatar_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ToSchema)]
 pub struct OrganizationMember {
     pub id: i64,
     pub organization_id: i64,
@@ -84,7 +84,7 @@ pub struct OrganizationInvitation {
     pub accepted_by: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum OrganizationRole {
     Owner,
     Admin,
@@ -114,14 +114,14 @@ impl std::str::FromStr for OrganizationRole {
     }
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct AddMemberRequest {
     #[validate(email)]
     pub email: String,
     pub role: OrganizationRole,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateMemberRequest {
     pub role: OrganizationRole,
 }
