@@ -3,38 +3,56 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use validator::Validate;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ToSchema)]
 pub struct Organization {
+    /// Unique organization ID
     pub id: i64,
+    /// Organization name (URL-friendly)
     pub name: String,
+    /// Display name for the organization
     pub display_name: String,
+    /// Optional description
     pub description: Option<String>,
+    /// Optional website URL
     pub website_url: Option<String>,
+    /// Optional avatar URL
     pub avatar_url: Option<String>,
+    /// When the organization was created
     pub created_at: DateTime<Utc>,
+    /// When the organization was last updated
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateOrganizationRequest {
+    /// Organization name (3-50 characters, URL-friendly)
     #[validate(length(min = 3, max = 50))]
     pub name: String,
+    /// Display name (1-100 characters)
     #[validate(length(min = 1, max = 100))]
     pub display_name: String,
+    /// Optional description (max 500 characters)
     #[validate(length(max = 500))]
     pub description: Option<String>,
+    /// Optional website URL
     pub website_url: Option<String>,
+    /// Optional avatar URL
     pub avatar_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateOrganizationRequest {
+    /// Updated display name (1-100 characters)
     #[validate(length(min = 1, max = 100))]
     pub display_name: Option<String>,
+    /// Updated description (max 500 characters)
     #[validate(length(max = 500))]
     pub description: Option<String>,
+    /// Updated website URL
     pub website_url: Option<String>,
+    /// Updated avatar URL
     pub avatar_url: Option<String>,
 }
 

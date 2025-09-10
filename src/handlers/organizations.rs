@@ -8,6 +8,7 @@ use axum::{
 };
 use sqlx::{FromRow, PgPool};
 use validator::Validate;
+use utoipa::ToSchema;
 
 use crate::{
     models::organizations::{
@@ -17,7 +18,18 @@ use crate::{
     AppState,
 };
 
-// Create a new organization
+/// Create a new organization
+#[utoipa::path(
+    post,
+    path = "/api/v1/orgs",
+    tag = "organizations",
+    request_body = CreateOrganizationRequest,
+    responses(
+        (status = 201, description = "Organization created successfully"),
+        (status = 400, description = "Validation failed or bad request"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn create_organization(
     State(state): State<AppState>,
     Json(req): Json<CreateOrganizationRequest>,
@@ -55,7 +67,20 @@ pub async fn create_organization(
     }
 }
 
-// Get organization details
+/// Get organization details by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/orgs/{id}",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID")
+    ),
+    responses(
+        (status = 200, description = "Organization details retrieved successfully"),
+        (status = 404, description = "Organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_organization(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -262,7 +287,16 @@ pub async fn remove_organization_member(
     }
 }
 
-// List user's organizations
+/// List all organizations for the authenticated user
+#[utoipa::path(
+    get,
+    path = "/api/v1/orgs",
+    tag = "organizations",
+    responses(
+        (status = 200, description = "List of user's organizations retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn list_user_organizations(State(state): State<AppState>) -> impl IntoResponse {
     // TODO: Get user_id from JWT token
     let user_id = 1i64; // Placeholder
