@@ -330,15 +330,15 @@ pub async fn docker_pull() -> impl axum::response::IntoResponse {
     (axum::http::StatusCode::OK, "Docker image pull stub")
 }
 
-/// Build Docker image và upload lên S3
+/// Build Docker image and upload to S3
 #[utoipa::path(
     post,
     path = "/api/v1/docker/build-upload-s3",
     tag = "docker",
     request_body = DockerBuildUploadS3Request,
     responses(
-        (status = 200, description = "Build và upload lên S3 thành công"),
-        (status = 500, description = "Thất bại")
+        (status = 200, description = "Build and upload to S3 successful"),
+        (status = 500, description = "Failed")
     )
 )]
 pub async fn docker_build_upload_s3(
@@ -456,15 +456,15 @@ pub async fn docker_build_upload_s3(
     }
 }
 
-/// Upload file lên S3
+/// Upload file to S3
 #[utoipa::path(
     post,
     path = "/api/v1/s3/upload",
     tag = "s3",
     request_body = S3UploadRequest,
     responses(
-        (status = 200, description = "Upload thành công"),
-        (status = 500, description = "Upload thất bại")
+        (status = 200, description = "Upload successful"),
+        (status = 500, description = "Upload failed")
     )
 )]
 pub async fn s3_upload(
@@ -506,16 +506,16 @@ pub async fn s3_upload(
     }
 }
 
-/// Download file từ S3
+/// Download file from S3
 #[utoipa::path(
     post,
     path = "/api/v1/s3/download",
     tag = "s3",
     request_body = S3DownloadRequest,
     responses(
-        (status = 200, description = "Download thành công"),
-        (status = 404, description = "File không tìm thấy"),
-        (status = 500, description = "Download thất bại")
+        (status = 200, description = "Download successful"),
+        (status = 404, description = "File not found"),
+        (status = 500, description = "Download failed")
     )
 )]
 pub async fn s3_download(
@@ -557,38 +557,123 @@ pub async fn s3_download(
     }
 }
 
-/// List files trong S3
-#[utoipa::path(
-    get,
-    path = "/api/v1/s3/list",
-    tag = "s3",
-    params(
-        ("bucket" = String, Query, description = "S3 bucket name"),
-        ("prefix" = Option<String>, Query, description = "Prefix to filter files")
-    ),
-    responses(
-        (status = 200, description = "Danh sách file thành công"),
-        (status = 500, description = "Lỗi khi list file")
-    )
-)]
-pub async fn s3_list() -> impl axum::response::IntoResponse {
-    // TODO: Implement S3 list with query parameters
-    (axum::http::StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "S3 list stub - implement with bucket and prefix parameters"
-    })))
+/// S3 List request for query parameters
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct S3ListRequest {
+    /// S3 bucket name
+    pub bucket: String,
+    /// Prefix to filter files (optional)
+    pub prefix: Option<String>,
 }
 
-/// Xóa file từ S3
+/// S3 Object information
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct S3Object {
+    /// Object key (file path)
+    pub key: String,
+    /// File size in bytes
+    pub size: i64,
+    /// Last modified time
+    pub last_modified: String,
+    /// ETag (checksum)
+    pub etag: String,
+}
+
+/// List files in S3
+#[utoipa::path(
+    post,
+    path = "/api/v1/s3/list",
+    tag = "s3",
+    request_body = S3ListRequest,
+    responses(
+        (status = 200, description = "List files successfully", body = Vec<S3Object>),
+        (status = 500, description = "Error while listing files")
+    )
+)]
+pub async fn s3_list(
+    Json(request): Json<S3ListRequest>,
+) -> impl axum::response::IntoResponse {
+    use std::process::Command;
+    
+    // Build aws s3 ls command
+    let mut bucket_path = format!("s3://{}/", request.bucket);
+    
+    // Add prefix to the path if provided
+    if let Some(prefix) = &request.prefix {
+        if !prefix.is_empty() {
+            bucket_path = format!("s3://{}/{}", request.bucket, prefix);
+        }
+    }
+    
+    let mut cmd = Command::new("aws");
+    cmd.arg("s3")
+       .arg("ls")
+       .arg(&bucket_path)
+       .arg("--recursive");
+    
+    match cmd.output() {
+        Ok(output) => {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut objects = Vec::new();
+                
+                // Parse AWS CLI output
+                for line in stdout.lines() {
+                    if !line.trim().is_empty() {
+                        // AWS CLI output format: "2023-01-01 12:00:00   1234 path/to/file.txt"
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 4 {
+                            let date = parts[0];
+                            let time = parts[1];
+                            let size = parts[2].parse::<i64>().unwrap_or(0);
+                            let key = parts[3..].join(" ");
+                            
+                            objects.push(S3Object {
+                                key: key.clone(),
+                                size,
+                                last_modified: format!("{} {}", date, time),
+                                etag: "".to_string(), // AWS CLI doesn't provide etag in ls
+                            });
+                        }
+                    }
+                }
+                
+                (axum::http::StatusCode::OK, Json(serde_json::json!({
+                    "success": true,
+                    "message": format!("Found {} objects in bucket '{}'", objects.len(), request.bucket),
+                    "bucket": request.bucket,
+                    "prefix": request.prefix,
+                    "objects": objects
+                })))
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                    "success": false,
+                    "message": "Failed to list S3 objects",
+                    "error": stderr.to_string()
+                })))
+            }
+        }
+        Err(e) => {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": "Failed to execute S3 list command",
+                "error": e.to_string()
+            })))
+        }
+    }
+}
+
+/// Delete file from S3
 #[utoipa::path(
     delete,
     path = "/api/v1/s3/delete",
     tag = "s3",
     request_body = S3DeleteRequest,
     responses(
-        (status = 200, description = "Xóa file thành công"),
-        (status = 404, description = "File không tìm thấy"),
-        (status = 500, description = "Xóa file thất bại")
+        (status = 200, description = "Delete file successful"),
+        (status = 404, description = "File not found"),
+        (status = 500, description = "Delete file failed")
     )
 )]
 pub async fn s3_delete(

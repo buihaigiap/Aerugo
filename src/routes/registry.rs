@@ -21,6 +21,6 @@ pub fn routes() -> Router<AppState> {
         // S3 API routes
         .route("/s3/upload", post(registry::s3_upload))
         .route("/s3/download", post(registry::s3_download))
-        .route("/s3/list", get(registry::s3_list))
+        .route("/s3/list", post(registry::s3_list))
         .route("/s3/delete", delete(registry::s3_delete))
 }
