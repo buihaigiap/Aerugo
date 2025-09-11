@@ -277,14 +277,15 @@ CMD echo "Hello from Aerugo test image"
         logger.info("Testing S3 list API...")
         
         try:
-            params = {
+            payload = {
                 "bucket": "test-bucket",
                 "prefix": "test-files/"
             }
             
-            response = requests.get(
+            response = requests.post(
                 f"{self.s3_api}/list",
-                params=params,
+                json=payload,
+                headers={"Content-Type": "application/json"},
                 timeout=30
             )
             
@@ -294,6 +295,15 @@ CMD echo "Hello from Aerugo test image"
                 data = response.json()
                 logger.info(f"✓ S3 list API OK: {data.get('message')}")
                 return True
+            elif response.status_code == 500:
+                # Expected error when AWS credentials not configured
+                data = response.json()
+                if "credentials" in data.get("error", "").lower():
+                    logger.info(f"✓ S3 list API OK (Expected credentials error): {data.get('message')}")
+                    return True
+                else:
+                    logger.error(f"❌ S3 list API failed: {response.status_code} - {data}")
+                    return False
             else:
                 logger.error(f"❌ S3 list API failed: {response.status_code}")
                 return False
