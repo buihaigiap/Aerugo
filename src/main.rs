@@ -52,6 +52,8 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/health", axum::routing::get(handlers::health::check))
         .nest("/api/v1", routes::api::api_router())
+        // Docker Registry V2 API
+        .nest("/v2", routes::docker_registry_v2::docker_registry_v2_router())
         // Serve Swagger UI
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi))
         .layer(tower_http::trace::TraceLayer::new_for_http())
