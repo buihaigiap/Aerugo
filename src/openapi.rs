@@ -8,7 +8,7 @@ use crate::handlers::{
 use crate::models::{
     user::UserResponse,
     organizations::{Organization, CreateOrganizationRequest, UpdateOrganizationRequest},
-};
+};  
 
 /// Generate the OpenAPI documentation for the entire API
 #[derive(OpenApi)]
@@ -20,6 +20,7 @@ use crate::models::{
         // Auth endpoints
         auth::register,
         auth::login,
+        auth::refresh,
         
         // Organization endpoints
         organizations::create_organization,
@@ -40,6 +41,7 @@ use crate::models::{
             UserResponse,
             auth::RegisterRequest,
             auth::LoginRequest,
+            auth::RefreshRequest,
             auth::AuthResponse,
             
             // Organization schemas

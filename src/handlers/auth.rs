@@ -11,6 +11,7 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use chrono::{Duration, Utc};
 
 /// User registration request
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -346,4 +347,67 @@ pub async fn me(
             )
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RefreshRequest {
+    /// Old token to refresh
+    token: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Token refreshed successfully", body = AuthResponse),
+        (status = 401, description = "Invalid or expired token"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(req): Json<RefreshRequest>,
+) -> impl IntoResponse {
+    let claims = match crate::auth::verify_token(&req.token, state.config.auth.jwt_secret.expose_secret().as_bytes()) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Invalid token"
+                })),
+            );
+        }
+    };
+
+    let new_claims = Claims {
+        sub: claims.sub,
+        exp: (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
+    };
+
+    let new_token = match encode(
+        &Header::default(),
+        &new_claims,
+        &EncodingKey::from_secret(state.config.auth.jwt_secret.expose_secret().as_bytes()),
+    ) {
+        Ok(token) => token,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to create new token: {}", e)
+                })),
+            );
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "token": new_token
+        })),
+    )
 }
