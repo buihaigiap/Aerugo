@@ -13,4 +13,6 @@ pub fn api_router() -> Router<AppState> {
         .nest("/orgs", super::organizations::organization_router())
         // Mount registry routes under /registry prefix
         .nest("/registry", super::registry::routes())
+        // Mount storage routes under /storage prefix
+        .nest("/storage", super::storage::routes())
 }

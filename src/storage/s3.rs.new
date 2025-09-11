@@ -1,16 +1,17 @@
 use super::{BlobMetadata, Storage, StorageConfig};
-use anyhow::{Context, Result};
+use anyhow::{Result, Context};
 use async_trait::async_trait;
-use aws_config::{retry::RetryConfig, Region};
 use aws_sdk_s3::config::{Builder as S3ConfigBuilder, Credentials};
 use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::{primitives::ByteStream, Client as S3Client};
+use aws_config::{Region, retry::RetryConfig};
+use aws_sdk_s3::{Client as S3Client, primitives::ByteStream};
 use bytes::Bytes;
 use futures::StreamExt;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::io::AsyncRead;
+use tracing::{warn, error};
 use tokio_util::io::ReaderStream;
-use tracing::{error, warn};
 
 pub struct S3Storage {
     client: S3Client,
@@ -70,31 +71,25 @@ impl S3Storage {
             S3AuthMethod::Static {
                 access_key_id,
                 secret_access_key,
-            } => Credentials::new(
+            } => Credentials::from_keys(
                 access_key_id,
                 secret_access_key,
                 None,
-                None,
-                "static-provider",
             ),
             S3AuthMethod::AssumeRole { .. } => {
                 return Err(anyhow::anyhow!("AssumeRole authentication not implemented"))
             }
             S3AuthMethod::WebIdentity { .. } => {
-                return Err(anyhow::anyhow!(
-                    "WebIdentity authentication not implemented"
-                ))
+                return Err(anyhow::anyhow!("WebIdentity authentication not implemented"))
             }
             S3AuthMethod::Environment => {
-                return Err(anyhow::anyhow!(
-                    "Environment authentication not implemented"
-                ))
+                return Err(anyhow::anyhow!("Environment authentication not implemented"))
             }
         };
 
         // Create retry config
-        let retry_config =
-            RetryConfig::standard().with_max_attempts(config.retry_attempts.unwrap_or(3));
+        let retry_config = RetryConfig::standard()
+            .with_max_attempts(config.retry_attempts.unwrap_or(3));
 
         // Create S3 configuration
         let s3_config = S3ConfigBuilder::new()
@@ -127,7 +122,11 @@ impl S3Storage {
         }
     }
 
-    async fn abort_multipart_upload(&self, key: &str, upload_id: &str) -> Result<()> {
+    async fn abort_multipart_upload(
+        &self,
+        key: &str,
+        upload_id: &str,
+    ) -> Result<()> {
         match self
             .client
             .abort_multipart_upload()
@@ -180,7 +179,7 @@ impl Storage for S3Storage {
                 bytes.extend_from_slice(&chunk);
             }
             let body = ByteStream::from(bytes);
-
+            
             self.client
                 .put_object()
                 .bucket(&self.bucket)
@@ -361,9 +360,8 @@ impl Storage for S3Storage {
             Ok(response) => {
                 let last_modified = response.last_modified.unwrap();
                 let secs = last_modified.as_secs_f64() as i64;
-                let nanos = ((last_modified.as_secs_f64().fract() * 1_000_000_000.0) as u32)
-                    .min(999_999_999);
-
+                let nanos = ((last_modified.as_secs_f64().fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                
                 Ok(Some(BlobMetadata {
                     size: response.content_length.unwrap_or(0) as u64,
                     digest: digest.to_string(),
@@ -390,10 +388,8 @@ impl Storage for S3Storage {
 }
 
 impl StorageConfig for S3Config {
-    fn create_storage(&self) -> Result<Box<dyn Storage>> {
-        // Use tokio runtime to initialize the storage
-        let runtime = tokio::runtime::Handle::current();
-        let storage = runtime.block_on(S3Storage::new(self))?;
+    async fn try_init(&self) -> Result<Box<dyn Storage>> {
+        let storage = S3Storage::new(self).await?;
         Ok(Box::new(storage))
     }
 }
