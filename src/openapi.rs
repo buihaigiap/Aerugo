@@ -7,8 +7,9 @@ use crate::handlers::{
 };
 use crate::models::{
     user::UserResponse,
-    organizations::{Organization, CreateOrganizationRequest, UpdateOrganizationRequest},
-};  
+    organizations::{Organization, CreateOrganizationRequest, UpdateOrganizationRequest, AddMemberRequest, UpdateMemberRequest, OrganizationMember},
+};
+use crate::handlers::registry::{Repository, ImageInfo};
 
 /// Generate the OpenAPI documentation for the entire API
 #[derive(OpenApi)]
@@ -26,6 +27,12 @@ use crate::models::{
         organizations::create_organization,
         organizations::get_organization,
         organizations::list_user_organizations,
+        organizations::update_organization,
+        organizations::delete_organization,
+        organizations::get_organization_members,
+        organizations::add_organization_member,
+        organizations::update_member_role,
+        organizations::remove_organization_member,
         
         // Registry endpoints
         registry::list_repositories,
@@ -48,10 +55,13 @@ use crate::models::{
             Organization,
             CreateOrganizationRequest,
             UpdateOrganizationRequest,
+            AddMemberRequest,
+            UpdateMemberRequest,
+            OrganizationMember,
             
             // Registry schemas
-            registry::Repository,
-            registry::ImageInfo,
+            Repository,
+            ImageInfo,
         )
     ),
     tags(

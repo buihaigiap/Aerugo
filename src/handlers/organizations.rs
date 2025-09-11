@@ -21,7 +21,7 @@ use crate::{
 /// Create a new organization
 #[utoipa::path(
     post,
-    path = "/api/v1/orgs",
+    path = "/api/v1/organizations",
     tag = "organizations",
     request_body = CreateOrganizationRequest,
     responses(
@@ -70,7 +70,7 @@ pub async fn create_organization(
 /// Get organization details by ID
 #[utoipa::path(
     get,
-    path = "/api/v1/orgs/{id}",
+    path = "/api/v1/organizations/{id}",
     tag = "organizations",
     params(
         ("id" = i64, Path, description = "Organization ID")
@@ -111,6 +111,22 @@ pub async fn get_organization(
 }
 
 // Update organization
+#[utoipa::path(
+    put,
+    path = "/api/v1/organizations/{id}",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID")
+    ),
+    request_body = UpdateOrganizationRequest,
+    responses(
+        (status = 200, description = "Organization updated successfully"),
+        (status = 400, description = "Validation failed or bad request"),
+        (status = 403, description = "Insufficient permissions"),
+        (status = 404, description = "Organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn update_organization(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -149,6 +165,20 @@ pub async fn update_organization(
 }
 
 // Delete organization
+#[utoipa::path(
+    delete,
+    path = "/api/v1/organizations/{id}",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID")
+    ),
+    responses(
+        (status = 204, description = "Organization deleted successfully"),
+        (status = 403, description = "Only owners can delete organizations"),
+        (status = 404, description = "Organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn delete_organization(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -171,6 +201,20 @@ pub async fn delete_organization(
 }
 
 // Get organization members
+#[utoipa::path(
+    get,
+    path = "/api/v1/organizations/{id}/members",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID")
+    ),
+    responses(
+        (status = 200, description = "Organization members retrieved successfully"),
+        (status = 403, description = "Access denied: not a member of this organization"),
+        (status = 404, description = "Organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_organization_members(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -198,6 +242,22 @@ pub async fn get_organization_members(
 }
 
 // Add member to organization
+#[utoipa::path(
+    post,
+    path = "/api/v1/organizations/{id}/members",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID")
+    ),
+    request_body = AddMemberRequest,
+    responses(
+        (status = 201, description = "Member added to organization successfully"),
+        (status = 400, description = "User already a member or validation failed"),
+        (status = 403, description = "Insufficient permissions to add members"),
+        (status = 404, description = "User or organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn add_organization_member(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -236,6 +296,23 @@ pub async fn add_organization_member(
 }
 
 // Update member role
+#[utoipa::path(
+    put,
+    path = "/api/v1/organizations/{id}/members/{member_id}",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID"),
+        ("member_id" = i64, Path, description = "Member user ID")
+    ),
+    request_body = UpdateMemberRequest,
+    responses(
+        (status = 200, description = "Member role updated successfully"),
+        (status = 400, description = "Invalid role or validation failed"),
+        (status = 403, description = "Insufficient permissions to modify this member"),
+        (status = 404, description = "Member or organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn update_member_role(
     State(state): State<AppState>,
     Path((id, member_id)): Path<(i64, i64)>,
@@ -266,6 +343,21 @@ pub async fn update_member_role(
 }
 
 // Remove member from organization
+#[utoipa::path(
+    delete,
+    path = "/api/v1/organizations/{id}/members/{member_id}",
+    tag = "organizations",
+    params(
+        ("id" = i64, Path, description = "Organization ID"),
+        ("member_id" = i64, Path, description = "Member user ID")
+    ),
+    responses(
+        (status = 204, description = "Member removed from organization successfully"),
+        (status = 403, description = "Insufficient permissions to remove this member"),
+        (status = 404, description = "Member or organization not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn remove_organization_member(
     State(state): State<AppState>,
     Path((id, member_id)): Path<(i64, i64)>,
@@ -290,7 +382,7 @@ pub async fn remove_organization_member(
 /// List all organizations for the authenticated user
 #[utoipa::path(
     get,
-    path = "/api/v1/orgs",
+    path = "/api/v1/organizations",
     tag = "organizations",
     responses(
         (status = 200, description = "List of user's organizations retrieved successfully"),
