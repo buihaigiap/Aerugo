@@ -21,6 +21,7 @@ use crate::handlers::registry::{Repository, ImageInfo};
         // Auth endpoints
         auth::register,
         auth::login,
+        auth::refresh,
         
         // Organization endpoints
         organizations::create_organization,
@@ -47,6 +48,7 @@ use crate::handlers::registry::{Repository, ImageInfo};
             UserResponse,
             auth::RegisterRequest,
             auth::LoginRequest,
+            auth::RefreshRequest,
             auth::AuthResponse,
             
             // Organization schemas

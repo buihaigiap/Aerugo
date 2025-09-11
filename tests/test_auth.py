@@ -1,3 +1,4 @@
+
 """
 Authentication endpoint tests
 """
@@ -286,24 +287,71 @@ class AuthTests(BaseTestCase):
         self.logger.info("✅ Registration validation test passed")
     
     def test_token_refresh(self):
-        """Test token refresh functionality (if implemented)"""
+        """Test token refresh functionality"""
         self.logger.info("Testing token refresh")
         
-        user = TEST_USERS[0]
+        # Create a test user and get a valid token
+        import random
+        import string
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'refresh_user_{session_id}',
+            email=f'refresh_{session_id}@example.com',
+            password=f'refreshpass123'
+        )
         
-        # Try to refresh token (this endpoint might not exist yet)
-        response = self.make_request("POST", "/auth/refresh", token=user.token)
+        # Register the user
+        self.logger.info(f"Registering user for refresh test: {user.email}")
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
         
-        if response.status_code == 404:
-            self.logger.info("Token refresh endpoint not implemented - skipping")
-            return
+        if register_response.status_code != 201:
+            self.logger.error(f"Failed to register user: {register_response.text}")
+            raise AssertionError("Could not register user for refresh test")
         
-        if response.status_code == 200:
-            data = response.json()
-            self.verify_json_structure(data, ["token"])
-            self.logger.info("✅ Token refresh test passed")
-        else:
-            self.logger.warning(f"Unexpected token refresh response: {response.status_code}")
+        # Login to get a fresh token
+        self.logger.info(f"Logging in user: {user.email}")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": user.password
+        })
+        
+        if login_response.status_code != 200:
+            self.logger.error(f"Failed to login user: {login_response.text}")
+            raise AssertionError("Could not login user for refresh test")
+        
+        old_token = login_response.json()["token"]
+        user.token = old_token
+        test_data_manager.track_user(user.__dict__)
+        
+        # Refresh the token
+        self.logger.info("Attempting to refresh token")
+        refresh_response = self.make_request("POST", "/auth/refresh", {
+            "token": old_token
+        })
+        
+        self.assert_response(refresh_response, 200, "Token refresh failed")
+        
+        data = refresh_response.json()
+        self.verify_json_structure(data, ["token"])
+        new_token = data["token"]
+        
+        self.logger.info("Token refreshed successfully")
+        
+        # Verify the new token works
+        self.logger.info("Verifying new token with protected endpoint")
+        verify_response = self.make_request("GET", "/auth/me", token=new_token)
+        self.assert_response(verify_response, 200, "New token verification failed")
+        
+        verify_data = verify_response.json()
+        self.verify_json_structure(verify_data, ["id", "username", "email", "created_at"])
+        assert verify_data["email"] == user.email, "Email mismatch in verification"
+        
+        self.logger.info("✅ Token refresh test passed")
     
     def test_logout(self):
         """Test logout functionality (if implemented)"""
