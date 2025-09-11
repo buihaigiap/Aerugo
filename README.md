@@ -52,44 +52,63 @@
 
 ### Prerequisites
 - Rust 1.70+ and Cargo
-- PostgreSQL 14+
-- Redis 6+
-- MinIO or other S3-compatible storage
-- Docker (optional, for containerized development)
+- Docker (for development services)
+- Git
+
+**That's it!** Our development scripts handle everything else automatically.
 
 ### Quick Start
-1. Clone the repository:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/AI-Decenter/Aerugo.git
    cd Aerugo
    ```
 
-2. Set up the development environment:
+2. **Set up development environment (one command!):**
    ```bash
-   # Run the development setup script
-   ./scripts/setup-dev-env.sh
+   ./scripts/dev.sh setup
+   ```
+   This script will:
+   - Check Docker installation
+   - Set up PostgreSQL, Redis, and MinIO containers with proper ports
+   - Create necessary databases and buckets
+   - Configure all services according to your `.env` file
+
+3. **Start developing:**
+   ```bash
+   ./scripts/dev.sh run
    ```
 
-3. Configure the application:
+4. **Run tests (in another terminal):**
    ```bash
-   # Copy the default config
-   cp config/default.yml .env
-   
-   # Edit the configuration as needed
-   nano .env
-   ```
-
-4. Run the development server:
-   ```bash
-   # Start the development server
-   ./scripts/dev.sh
-   ```
-
-5. Run tests:
-   ```bash
-   # Run integration tests
    ./runtest.sh
    ```
+
+### Development Commands
+
+The `./scripts/dev.sh` script provides everything you need:
+
+```bash
+# Infrastructure management
+./scripts/dev.sh setup     # Initial setup (run once)
+./scripts/dev.sh start     # Start all services
+./scripts/dev.sh stop      # Stop all services  
+./scripts/dev.sh restart   # Restart all services
+./scripts/dev.sh status    # Check service status
+./scripts/dev.sh clean     # Reset everything
+
+# Development workflow
+./scripts/dev.sh build     # Build the application
+./scripts/dev.sh run       # Run in development mode
+./scripts/dev.sh test      # Run Rust tests
+./scripts/dev.sh check     # Quick code check
+./scripts/dev.sh fmt       # Format code
+
+# Service access
+./scripts/dev.sh psql      # Connect to PostgreSQL
+./scripts/dev.sh redis-cli # Connect to Redis
+./scripts/dev.sh minio     # Open MinIO console
+```
 
 ### API Documentation
 The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
@@ -202,247 +221,116 @@ A RESTful API for administrative and user-level management tasks. All responses 
 
 ## 🛠️ Development Setup
 
-This section provides a comprehensive guide for setting up your development environment to contribute to Aerugo.
+**TL;DR**: Just run `./scripts/dev.sh setup` and you're ready to develop!
 
 ### Prerequisites
 
-Before you begin, ensure you have the following installed on your development machine:
+- **Docker** - For running development services (PostgreSQL, Redis, MinIO)
+- **Rust 1.70+** - The programming language and toolchain
+- **Git** - Version control
 
-#### Required Tools
+Install prerequisites:
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
 
-1. **Rust Toolchain** (latest stable)
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source ~/.cargo/env
-   rustup update stable
-   ```
+# Install Docker (follow official docs for your OS)
+# https://docs.docker.com/get-docker/
+```
 
-2. **Git** (for version control)
-   ```bash
-   # On Ubuntu/Debian
-   sudo apt update && sudo apt install git
+### Automated Setup (Recommended)
 
-   # On macOS
-   brew install git
-
-   # On Windows
-   # Download from https://git-scm.com/downloads
-   ```
-
-3. **Docker & Docker Compose** (for testing and running dependencies)
-   ```bash
-   # Follow instructions at https://docs.docker.com/get-docker/
-   # Verify installation
-   docker --version
-   docker-compose --version
-   ```
-
-#### External Dependencies
-
-Aerugo requires the following services for development:
-
-1. **PostgreSQL Database**
-   ```bash
-   # Using Docker (recommended for development)
-   docker run --name aerugo-postgres \
-     -e POSTGRES_DB=aerugo_dev \
-     -e POSTGRES_USER=aerugo \
-     -e POSTGRES_PASSWORD=development \
-     -p 5432:5432 \
-     -d postgres:15
-   ```
-
-2. **Redis Cache** (optional but recommended)
-   ```bash
-   docker run --name aerugo-redis \
-     -p 6379:6379 \
-     -d redis:7-alpine
-   ```
-
-3. **S3-Compatible Storage** (choose one):
-   
-   **Option A: MinIO (recommended for local development)**
-   ```bash
-   docker run --name aerugo-minio \
-     -p 9000:9000 -p 9001:9001 \
-     -e MINIO_ROOT_USER=minioadmin \
-     -e MINIO_ROOT_PASSWORD=minioadmin \
-     -d minio/minio server /data --console-address ":9001"
-   ```
-   
-   **Option B: LocalStack (AWS S3 emulator)**
-   ```bash
-   docker run --name aerugo-localstack \
-     -p 4566:4566 \
-     -e SERVICES=s3 \
-     -d localstack/localstack
-   ```
-
-### Development Environment Setup
-
-#### 1. Clone the Repository
+Our development scripts handle everything automatically:
 
 ```bash
+# 1. Clone and enter the project
 git clone https://github.com/AI-Decenter/Aerugo.git
 cd Aerugo
+
+# 2. One command setup - this handles everything!
+./scripts/dev.sh setup
+
+# 3. Start developing
+./scripts/dev.sh run
 ```
 
-#### 2. Install Development Dependencies
-
-```bash
-# Install additional Rust tools for development
-rustup component add rustfmt clippy
-
-# Install cargo-watch for auto-recompilation during development
-cargo install cargo-watch
-
-# Install cargo-audit for security vulnerability scanning
-cargo install cargo-audit
-
-# Install sqlx-cli for database migrations (when implemented)
-cargo install sqlx-cli --no-default-features --features postgres
-```
-
-#### 3. Configure Your Development Environment
-
-Create a `.env` file in the project root for development configuration:
-
-```bash
-# Copy the example environment file
-cp .env.example .env  # (will be created once project structure exists)
-
-# Edit the configuration for your local setup
-nano .env
-```
-
-Example `.env` configuration:
-```bash
-# Database Configuration
-DATABASE_URL=postgresql://aerugo:development@localhost:5432/aerugo_dev
-
-# Redis Configuration (optional)
-REDIS_URL=redis://localhost:6379
-
-# S3 Configuration (MinIO example)
-S3_ENDPOINT=http://localhost:9000
-S3_BUCKET=aerugo-registry
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
-S3_REGION=us-east-1
-
-# Server Configuration
-LISTEN_ADDRESS=0.0.0.0:8080
-LOG_LEVEL=debug
-
-# JWT Configuration (generate a random secret for development)
-JWT_SECRET=your-super-secret-jwt-key-for-development
-```
-
-#### 4. Set Up Your IDE/Editor
-
-**Visual Studio Code (recommended)**
-1. Install the Rust Analyzer extension
-2. Install the Better TOML extension for configuration files
-3. Install the Docker extension for container management
-
-**VS Code settings.json additions:**
-```json
-{
-    "rust-analyzer.cargo.watchOptions": {
-        "allTargets": false
-    },
-    "rust-analyzer.check.command": "clippy",
-    "editor.formatOnSave": true
-}
-```
-
-**Other IDEs:**
-- **IntelliJ IDEA/CLion**: Install the Rust plugin
-- **Vim/Neovim**: Use rust.vim and coc-rust-analyzer
-- **Emacs**: Use rust-mode and lsp-mode with rust-analyzer
+**What the setup script does:**
+- ✅ Validates your environment configuration
+- ✅ Creates Docker containers for PostgreSQL (port 5433), Redis (port 6380), and MinIO (port 9001/9002)
+- ✅ Sets up databases and S3 buckets with proper permissions  
+- ✅ Uses non-default ports to avoid conflicts with existing services
+- ✅ Configures everything according to your `.env` file
 
 ### Development Workflow
 
-#### Building the Project
+All development tasks are handled by the `dev.sh` script:
 
 ```bash
-# Build in debug mode (faster compilation, includes debug symbols)
-cargo build
+# Daily workflow
+./scripts/dev.sh start    # Start all services (if stopped)
+./scripts/dev.sh run      # Run Aerugo in development mode
+./scripts/dev.sh test     # Run tests
+./scripts/dev.sh stop     # Stop services when done
 
-# Build in release mode (optimized, for production)
-cargo build --release
+# Code quality
+./scripts/dev.sh fmt      # Format code
+./scripts/dev.sh check    # Quick syntax check
+cargo clippy              # Linting (manual command)
 
-# Build with all features enabled
-cargo build --all-features
+# Database/service access
+./scripts/dev.sh psql     # Connect to PostgreSQL
+./scripts/dev.sh minio    # Open MinIO web console
+./scripts/dev.sh redis-cli # Connect to Redis
+
+# Troubleshooting
+./scripts/dev.sh status   # Check all services
+./scripts/dev.sh logs     # View service logs
+./scripts/dev.sh clean    # Reset everything if issues occur
 ```
 
-#### Running Tests
+### Environment Configuration
+
+The setup script reads from your `.env` file. Default configuration works out-of-the-box:
 
 ```bash
-# Run all tests
-cargo test
+# Database (PostgreSQL on non-default port)
+DATABASE_URL=postgresql://aerugo:development@localhost:5433/aerugo_dev
 
-# Run tests with output
-cargo test -- --nocapture
+# Cache (Redis on non-default port)
+REDIS_URL=redis://localhost:6380
 
-# Run specific test
-cargo test test_name
+# Storage (MinIO S3-compatible on non-default ports)
+S3_ENDPOINT=http://localhost:9001
+S3_BUCKET=aerugo-registry
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
 
-# Run tests with coverage (requires cargo-tarpaulin)
-cargo install cargo-tarpaulin
-cargo tarpaulin --out Html
+# Server Configuration  
+LISTEN_ADDRESS=0.0.0.0:8080
+LOG_LEVEL=debug
+
+# Security
+JWT_SECRET=test-integration-secret-key-do-not-use-in-production
 ```
 
-#### Code Quality and Formatting
+**Need custom ports?** Just edit `.env` and run `./scripts/dev.sh setup` again.
 
+### IDE Setup (Optional)
+
+**VS Code (Recommended):**
 ```bash
-# Format code according to Rust standards
-cargo fmt
-
-# Check formatting without making changes
-cargo fmt --check
-
-# Run Clippy linter for code quality suggestions
-cargo clippy
-
-# Run Clippy with strict settings
-cargo clippy -- -D warnings
-
-# Check for security vulnerabilities
-cargo audit
+# Install essential extensions
+code --install-extension rust-lang.rust-analyzer
+code --install-extension vadimcn.vscode-lldb
+code --install-extension tamasfe.even-better-toml
 ```
 
-#### Running in Development Mode
+**Other IDEs:** Install Rust plugin and configure rust-analyzer LSP.
 
-```bash
-# Run with auto-reload on code changes
-cargo watch -x run
+### Manual Setup (Advanced)
 
-# Run with specific environment
-RUST_LOG=debug cargo run
-
-# Run tests on code changes
-cargo watch -x test
-```
-
-### Docker Development Environment
-
-For a complete containerized development setup:
-
-```bash
-# Create a docker-compose.dev.yml file (will be added to project)
-docker-compose -f docker-compose.dev.yml up -d
-
-# This will start:
-# - PostgreSQL database
-# - Redis cache
-# - MinIO S3-compatible storage
-# - Aerugo application in development mode
-```
-
-### Database Setup
-
-Once the database schema is implemented:
+If you prefer manual setup or need custom configuration:
 
 ```bash
 # Run database migrations
@@ -509,128 +397,178 @@ Once you have completed the [Development Setup](#-development-setup), follow the
 
 ### Quick Start
 
-1. **Start the required services:**
+1. **Install additional development tools:**
    ```bash
-   # Start PostgreSQL, Redis, and MinIO
+   # Rust development tools  
+   rustup component add rustfmt clippy
+   cargo install cargo-watch cargo-audit
+
+   # Optional: Database migration tool (when migrations are added)
+   cargo install sqlx-cli --no-default-features --features postgres
+   ```
+
+2. **Start the required services manually:**
+   ```bash
+   # PostgreSQL (note: using non-default port to avoid conflicts)
    docker run -d --name aerugo-postgres \
      -e POSTGRES_DB=aerugo_dev \
      -e POSTGRES_USER=aerugo \
      -e POSTGRES_PASSWORD=development \
-     -p 5432:5432 postgres:15
+     -p 5433:5432 postgres:15
 
-   docker run -d --name aerugo-redis -p 6379:6379 redis:7-alpine
+   # Redis (note: using non-default port)
+   docker run -d --name aerugo-redis -p 6380:6379 redis:7-alpine
 
+   # MinIO S3-compatible storage (note: using non-default ports)
    docker run -d --name aerugo-minio \
-     -p 9000:9000 -p 9001:9001 \
-     -e MINIO_ROOT_USER=minioadmin \
-     -e MINIO_ROOT_PASSWORD=minioadmin \
+     -p 9001:9000 -p 9002:9001 \
+     -e MINIO_ACCESS_KEY=minioadmin \
+     -e MINIO_SECRET_KEY=minioadmin \
      minio/minio server /data --console-address ":9001"
    ```
 
-2. **Configure MinIO bucket:**
+3. **Create S3 bucket:**
    ```bash
-   # Access MinIO console at http://localhost:9001
-   # Login with minioadmin/minioadmin
-   # Create a bucket named 'aerugo-registry'
+   # Install MinIO client
+   curl -L https://dl.min.io/client/mc/release/linux-amd64/mc -o mc
+   chmod +x mc && sudo mv mc /usr/local/bin/
+
+   # Configure and create bucket
+   mc alias set local http://localhost:9001 minioadmin minioadmin
+   mc mb local/aerugo-registry
+   mc anonymous set public local/aerugo-registry
    ```
 
-3. **Set up environment variables:**
+4. **Build and run:**
    ```bash
-   export DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev"
-   export REDIS_URL="redis://localhost:6379"
-   export S3_ENDPOINT="http://localhost:9000"
-   export S3_BUCKET="aerugo-registry"
-   export S3_ACCESS_KEY="minioadmin"
-   export S3_SECRET_KEY="minioadmin"
+   cargo build
+   cargo run
    ```
 
-4. **Build and run Aerugo:**
-   ```bash
-   cargo build --release
-   cargo run --release
-   ```
+### Testing
 
-5. **Test the installation:**
-   ```bash
-   # Test Registry API (once implemented)
-   curl http://localhost:8080/v2/
+Run the comprehensive test suite:
 
-   # Test Management API (once implemented)
-   curl http://localhost:8080/api/v1/health
-   ```
+```bash
+# Integration and API tests
+./runtest.sh
+
+# Unit tests only
+cargo test
+
+# Test with coverage
+cargo install cargo-tarpaulin
+cargo tarpaulin --out Html
+```
 
 ### Configuration
 
-Aerugo can be configured through environment variables or a configuration file:
+All configuration is managed through the `.env` file:
 
 #### Environment Variables
 ```bash
+# Database Configuration
+DATABASE_URL=postgresql://aerugo:development@localhost:5433/aerugo_dev
+DATABASE_REQUIRE_SSL=false
+DATABASE_MIN_CONNECTIONS=5
+DATABASE_MAX_CONNECTIONS=20
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6380
+REDIS_POOL_SIZE=10
+REDIS_TTL_SECONDS=3600
+
+# S3 Configuration (MinIO)
+S3_ENDPOINT=http://localhost:9001
+S3_BUCKET=aerugo-registry
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_REGION=us-east-1
+S3_USE_PATH_STYLE=true
+
 # Server Configuration
 LISTEN_ADDRESS=0.0.0.0:8080
-LOG_LEVEL=info
+API_PREFIX=/api/v1
+LOG_LEVEL=debug
 
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/aerugo
-DATABASE_MAX_CONNECTIONS=10
-
-# Redis Configuration (optional)
-REDIS_URL=redis://localhost:6379
-
-# S3 Configuration
-S3_ENDPOINT=https://s3.amazonaws.com
-S3_BUCKET=aerugo-registry-bucket
-S3_REGION=us-east-1
-S3_ACCESS_KEY=your-access-key
-S3_SECRET_KEY=your-secret-key
-
-# Security Configuration
-JWT_SECRET=your-super-secret-jwt-key
-CORS_ORIGINS=*
+# JWT Configuration
+JWT_SECRET=test-integration-secret-key-do-not-use-in-production
+JWT_EXPIRATION_SECONDS=3600
+REFRESH_TOKEN_EXPIRATION_SECONDS=604800
 ```
 
-#### Configuration File (config.toml)
-```toml
-[server]
-listen_address = "0.0.0.0:8080"
-log_level = "info"
-
-[database]
-url = "postgresql://user:password@localhost:5432/aerugo"
-max_connections = 10
-
-[cache]
-redis_url = "redis://localhost:6379"
-
-[storage]
-type = "s3"
-bucket = "aerugo-registry-bucket"
-region = "us-east-1"
-endpoint = "https://s3.amazonaws.com"
-# access_key and secret_key should be set via environment variables
-
-[security]
-jwt_secret = "your-super-secret-jwt-key"
-cors_origins = ["*"]
-```
+**Production configuration** should use secure values, SSL connections, and production-grade secrets.
 
 ### Testing Your Setup
 
-1. **Verify services are running:**
+1. **Check all services:**
    ```bash
-   # Check PostgreSQL
-   docker logs aerugo-postgres
-
-   # Check MinIO (should be accessible at http://localhost:9001)
-   curl http://localhost:9000/minio/health/live
-
-   # Check Redis
-   docker logs aerugo-redis
+   ./scripts/dev.sh status
    ```
 
-2. **Run the test suite:**
+2. **Test the API:**
    ```bash
-   cargo test
+   # Start the server
+   ./scripts/dev.sh run
+
+   # In another terminal, test health endpoint
+   curl http://localhost:8080/api/v1/health
+
+   # Run comprehensive tests
+   ./runtest.sh
    ```
+
+3. **Access web interfaces:**
+   ```bash
+   # MinIO Console
+   ./scripts/dev.sh minio
+   # Or manually: http://localhost:9002 (admin/admin)
+
+   # API Documentation  
+   # http://localhost:8080/api/docs (when server is running)
+   ```
+
+### Troubleshooting
+
+**Services won't start?**
+```bash
+# Check what's using your ports
+sudo lsof -i :5433 -i :6380 -i :9001
+
+# Reset everything and try again
+./scripts/dev.sh clean
+./scripts/dev.sh setup
+```
+
+**Database connection issues?**
+```bash
+# Check PostgreSQL container
+./scripts/dev.sh logs
+
+# Connect manually to debug
+./scripts/dev.sh psql
+```
+
+**MinIO/S3 issues?**
+```bash
+# Check MinIO status
+curl http://localhost:9001/minio/health/ready
+
+# Access MinIO console
+./scripts/dev.sh minio
+```
+
+**Need different ports?**
+Edit your `.env` file and re-run setup:
+```bash
+# Edit .env with your preferred ports
+nano .env
+
+# Apply changes  
+./scripts/dev.sh setup
+```
+
+For more detailed troubleshooting, see [scripts/README.md](scripts/README.md).
 
 ## 📁 Project Structure
 
