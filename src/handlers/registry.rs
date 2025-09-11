@@ -593,71 +593,48 @@ pub struct S3Object {
 pub async fn s3_list(
     Json(request): Json<S3ListRequest>,
 ) -> impl axum::response::IntoResponse {
-    use std::process::Command;
-    
-    // Build aws s3 ls command
-    let mut bucket_path = format!("s3://{}/", request.bucket);
-    
-    // Add prefix to the path if provided
-    if let Some(prefix) = &request.prefix {
-        if !prefix.is_empty() {
-            bucket_path = format!("s3://{}/{}", request.bucket, prefix);
-        }
-    }
-    
-    let mut cmd = Command::new("aws");
-    cmd.arg("s3")
-       .arg("ls")
-       .arg(&bucket_path)
-       .arg("--recursive");
-    
-    match cmd.output() {
+    // Use AWS SDK for Rust (rusoto_s3) to list objects
+    use rusoto_core::Region;
+    use rusoto_s3::{S3Client, S3, ListObjectsV2Request};
+    use tokio_stream::StreamExt;
+
+    let s3_client = S3Client::new(Region::Custom {
+        name: "minio".to_string(),
+        endpoint: "http://localhost:9001".to_string(),
+    });
+
+    let prefix = request.prefix.clone().unwrap_or_default();
+    let list_req = ListObjectsV2Request {
+        bucket: request.bucket.clone(),
+        prefix: if prefix.is_empty() { None } else { Some(prefix) },
+        ..Default::default()
+    };
+
+    match s3_client.list_objects_v2(list_req).await {
         Ok(output) => {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let mut objects = Vec::new();
-                
-                // Parse AWS CLI output
-                for line in stdout.lines() {
-                    if !line.trim().is_empty() {
-                        // AWS CLI output format: "2023-01-01 12:00:00   1234 path/to/file.txt"
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 4 {
-                            let date = parts[0];
-                            let time = parts[1];
-                            let size = parts[2].parse::<i64>().unwrap_or(0);
-                            let key = parts[3..].join(" ");
-                            
-                            objects.push(S3Object {
-                                key: key.clone(),
-                                size,
-                                last_modified: format!("{} {}", date, time),
-                                etag: "".to_string(), // AWS CLI doesn't provide etag in ls
-                            });
-                        }
-                    }
+            let mut objects = Vec::new();
+            if let Some(contents) = output.contents {
+                for obj in contents {
+                    objects.push(S3Object {
+                        key: obj.key.unwrap_or_default(),
+                        size: obj.size.unwrap_or(0),
+                        last_modified: obj.last_modified.unwrap_or_default(),
+                        etag: obj.e_tag.unwrap_or_default(),
+                    });
                 }
-                
-                (axum::http::StatusCode::OK, Json(serde_json::json!({
-                    "success": true,
-                    "message": format!("Found {} objects in bucket '{}'", objects.len(), request.bucket),
-                    "bucket": request.bucket,
-                    "prefix": request.prefix,
-                    "objects": objects
-                })))
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                    "success": false,
-                    "message": "Failed to list S3 objects",
-                    "error": stderr.to_string()
-                })))
             }
+            (axum::http::StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "message": format!("Found {} objects in bucket '{}'", objects.len(), request.bucket),
+                "bucket": request.bucket,
+                "prefix": request.prefix,
+                "objects": objects
+            })))
         }
         Err(e) => {
             (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                 "success": false,
-                "message": "Failed to execute S3 list command",
+                "message": "Failed to list S3 objects",
                 "error": e.to_string()
             })))
         }

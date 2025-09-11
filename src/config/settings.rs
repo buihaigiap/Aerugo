@@ -76,6 +76,8 @@ impl Settings {
         // Create settings from environment variables directly
         // Log that we're using environment variables only
         eprintln!("Loading configuration from environment variables and .env file");
+        eprintln!("LISTEN_ADDRESS: {:?}", std::env::var("LISTEN_ADDRESS"));
+        eprintln!("DATABASE_URL: {:?}", std::env::var("DATABASE_URL").map(|_| "[HIDDEN]"));
         
         let settings = Settings {
             server: ServerSettings {
