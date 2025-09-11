@@ -2,6 +2,10 @@
 
 This directory contains scripts to help with the development of Aerugo.
 
+## Important Note
+
+All scripts now read configuration from the `.env` file in the root directory to ensure consistency with the application configuration. Make sure your `.env` file is properly configured before running any scripts.
+
 ## Scripts Overview
 
 ### 1. `setup-dev-env.sh` - Development Environment Setup
@@ -9,13 +13,18 @@ This directory contains scripts to help with the development of Aerugo.
 Main script that sets up all external dependencies for development using Docker containers.
 
 **Features:**
-- Sets up PostgreSQL on port `5433` (non-default)
-- Sets up Redis on port `6380` (non-default)  
-- Sets up MinIO (S3-compatible) on ports `9001` (API) and `9002` (Console)
+- Reads configuration from `.env` file to ensure consistency
+- Sets up PostgreSQL using the port and credentials from `DATABASE_URL`
+- Sets up Redis using the port from `REDIS_URL`  
+- Sets up MinIO (S3-compatible) using configuration from `S3_*` environment variables
 - Creates isolated Docker network for all services
 - Automatically creates MinIO bucket with proper permissions
-- Updates `.env` file with correct configuration
+- Validates environment configuration before setup
 - Provides comprehensive connection information
+
+**Prerequisites:**
+- A properly configured `.env` file in the root directory
+- Docker installed and running
 
 **Usage:**
 ```bash
@@ -31,7 +40,7 @@ Main script that sets up all external dependencies for development using Docker 
 
 **Example:**
 ```bash
-# Initial setup
+# Initial setup (reads from .env)
 ./scripts/setup-dev-env.sh
 
 # Stop all services
@@ -44,6 +53,11 @@ Main script that sets up all external dependencies for development using Docker 
 ### 2. `dev.sh` - Development Helper
 
 Convenient wrapper script that provides common development tasks.
+
+**Features:**
+- Loads environment variables from `.env` file for all operations
+- Provides database and service connection helpers
+- Includes Rust development commands with proper environment setup
 
 **Usage:**
 ```bash
@@ -73,31 +87,35 @@ Convenient wrapper script that provides common development tasks.
 
 ## Service Configuration
 
-After running the setup script, the following services will be available:
+The scripts read configuration from your `.env` file to ensure consistency. The services will be set up according to your environment variables:
 
 ### PostgreSQL
-- **Host:** localhost
-- **Port:** 5433 (non-default)
-- **Database:** aerugo_dev
-- **Username:** aerugo
-- **Password:** development
-- **Connection String:** `postgresql://aerugo:development@localhost:5433/aerugo_dev`
+- Configuration read from `DATABASE_URL` environment variable
+- Default: `postgresql://aerugo:development@localhost:5433/aerugo_dev`
 
 ### Redis
-- **Host:** localhost
-- **Port:** 6380 (non-default)
-- **Connection String:** `redis://localhost:6380`
+- Configuration read from `REDIS_URL` environment variable  
+- Default: `redis://localhost:6380`
 
 ### MinIO (S3-compatible)
-- **API Endpoint:** http://localhost:9001 (non-default)
-- **Console:** http://localhost:9002
-- **Access Key:** minioadmin
-- **Secret Key:** minioadmin
-- **Bucket:** aerugo-registry
+- Configuration read from `S3_*` environment variables
+- API Endpoint from `S3_ENDPOINT` (default: http://localhost:9001)
+- Console: API port + 1 (default: http://localhost:9002)
+- Access Key from `S3_ACCESS_KEY` (default: minioadmin)
+- Secret Key from `S3_SECRET_KEY` (default: minioadmin)
+- Bucket from `S3_BUCKET` (default: aerugo-registry)
 
 ## Environment Variables
 
-The setup script automatically updates your `.env` file with the correct configuration. A backup of your original `.env` file is created before updating.
+The scripts require a properly configured `.env` file in the root directory. Required variables:
+- `DATABASE_URL` - PostgreSQL connection string
+- `REDIS_URL` - Redis connection string
+- `S3_ENDPOINT` - MinIO API endpoint
+- `S3_BUCKET` - S3 bucket name
+- `S3_ACCESS_KEY` - S3 access key
+- `S3_SECRET_KEY` - S3 secret key
+
+Make sure your `.env` file contains all required configuration before running the scripts.
 
 ## Prerequisites
 
@@ -143,12 +161,19 @@ To completely reset your development environment:
 ## Troubleshooting
 
 ### Port Conflicts
-If you encounter port conflicts, you can modify the port numbers at the top of `setup-dev-env.sh`:
+If you encounter port conflicts, you can modify the port numbers in your `.env` file:
 ```bash
-POSTGRES_PORT=5433
-REDIS_PORT=6380
-MINIO_PORT=9001
-MINIO_CONSOLE_PORT=9002
+# Update these in your .env file
+DATABASE_URL=postgresql://aerugo:development@localhost:NEW_PORT/aerugo_dev
+REDIS_URL=redis://localhost:NEW_PORT
+S3_ENDPOINT=http://localhost:NEW_PORT
+```
+
+### Environment Configuration Issues
+Validate your `.env` file:
+```bash
+# Check if required variables are set
+grep -E "DATABASE_URL|REDIS_URL|S3_ENDPOINT" .env
 ```
 
 ### Container Issues

@@ -12,6 +12,45 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Function to load environment variables from .env file
+load_env_vars() {
+    if [ -f ".env" ]; then
+        # Export environment variables from .env file, ignoring comments and empty lines
+        export $(grep -v '^#' .env | grep -v '^$' | xargs)
+    fi
+}
+
+# Function to extract values from environment variables
+parse_env_vars() {
+    # Parse DATABASE_URL to extract components
+    if [[ "$DATABASE_URL" =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+        POSTGRES_USER="${BASH_REMATCH[1]}"
+        POSTGRES_PASSWORD="${BASH_REMATCH[2]}"
+        POSTGRES_HOST="${BASH_REMATCH[3]}"
+        POSTGRES_PORT="${BASH_REMATCH[4]}"
+        POSTGRES_DB="${BASH_REMATCH[5]}"
+    fi
+
+    # Parse REDIS_URL to extract port
+    if [[ "$REDIS_URL" =~ redis://([^:]+):([0-9]+) ]]; then
+        REDIS_HOST="${BASH_REMATCH[1]}"
+        REDIS_PORT="${BASH_REMATCH[2]}"
+    fi
+
+    # Parse S3 configuration
+    if [[ "$S3_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
+        MINIO_HOST="${BASH_REMATCH[1]}"
+        MINIO_PORT="${BASH_REMATCH[2]}"
+    fi
+
+    # Set MinIO console port (API port + 1)
+    MINIO_CONSOLE_PORT=$((MINIO_PORT + 1))
+}
+
+# Load environment variables at the start
+load_env_vars
+parse_env_vars
+
 print_step() {
     echo -e "${YELLOW}>>> $1${NC}"
 }
@@ -96,7 +135,7 @@ show_logs() {
 # Function to connect to PostgreSQL
 connect_psql() {
     print_step "Connecting to PostgreSQL..."
-    docker exec -it aerugo-postgres psql -U aerugo -d aerugo_dev
+    docker exec -it aerugo-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 }
 
 # Function to connect to Redis
@@ -108,17 +147,17 @@ connect_redis() {
 # Function to open MinIO console
 open_minio() {
     print_step "Opening MinIO console..."
-    echo -e "${GREEN}MinIO Console: http://localhost:9002${NC}"
-    echo -e "${GREEN}Access Key: minioadmin${NC}"
-    echo -e "${GREEN}Secret Key: minioadmin${NC}"
+    echo -e "${GREEN}MinIO Console: http://localhost:$MINIO_CONSOLE_PORT${NC}"
+    echo -e "${GREEN}Access Key: $S3_ACCESS_KEY${NC}"
+    echo -e "${GREEN}Secret Key: $S3_SECRET_KEY${NC}"
     
     # Try to open browser if available
     if command -v xdg-open &> /dev/null; then
-        xdg-open http://localhost:9002
+        xdg-open "http://localhost:$MINIO_CONSOLE_PORT"
     elif command -v open &> /dev/null; then
-        open http://localhost:9002
+        open "http://localhost:$MINIO_CONSOLE_PORT"
     else
-        echo -e "${YELLOW}Please open http://localhost:9002 in your browser${NC}"
+        echo -e "${YELLOW}Please open http://localhost:$MINIO_CONSOLE_PORT in your browser${NC}"
     fi
 }
 
@@ -131,17 +170,23 @@ clean() {
 # Rust development functions
 build() {
     print_step "Building Rust application..."
+    # Load environment variables for build
+    load_env_vars
     cargo build
     print_success "Build completed"
 }
 
 run_app() {
     print_step "Running Rust application in development mode..."
+    # Load environment variables for runtime
+    load_env_vars
     cargo run
 }
 
 test() {
     print_step "Running tests..."
+    # Load environment variables for tests
+    load_env_vars
     cargo test
 }
 

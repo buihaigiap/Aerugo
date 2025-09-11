@@ -13,19 +13,59 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration - Non-default ports to avoid conflicts
-POSTGRES_PORT=5433
-REDIS_PORT=6380
-MINIO_PORT=9001
-MINIO_CONSOLE_PORT=9002
+# Function to load environment variables from .env file
+load_env_vars() {
+    if [ -f ".env" ]; then
+        print_step "Loading environment variables from .env file..."
+        # Export environment variables from .env file, ignoring comments and empty lines
+        export $(grep -v '^#' .env | grep -v '^$' | xargs)
+        print_success "Environment variables loaded"
+    else
+        print_error ".env file not found. Please create one with proper configuration."
+        exit 1
+    fi
+}
 
-POSTGRES_DB=aerugo_dev
-POSTGRES_USER=aerugo
-POSTGRES_PASSWORD=development
+# Function to extract values from environment variables
+parse_env_vars() {
+    # Parse DATABASE_URL to extract components
+    if [[ "$DATABASE_URL" =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+        POSTGRES_USER="${BASH_REMATCH[1]}"
+        POSTGRES_PASSWORD="${BASH_REMATCH[2]}"
+        POSTGRES_HOST="${BASH_REMATCH[3]}"
+        POSTGRES_PORT="${BASH_REMATCH[4]}"
+        POSTGRES_DB="${BASH_REMATCH[5]}"
+    else
+        print_error "Invalid DATABASE_URL format in .env file"
+        exit 1
+    fi
 
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=aerugo-registry
+    # Parse REDIS_URL to extract port
+    if [[ "$REDIS_URL" =~ redis://([^:]+):([0-9]+) ]]; then
+        REDIS_HOST="${BASH_REMATCH[1]}"
+        REDIS_PORT="${BASH_REMATCH[2]}"
+    else
+        print_error "Invalid REDIS_URL format in .env file"
+        exit 1
+    fi
+
+    # Parse S3 configuration
+    if [[ "$S3_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
+        MINIO_HOST="${BASH_REMATCH[1]}"
+        MINIO_PORT="${BASH_REMATCH[2]}"
+    else
+        print_error "Invalid S3_ENDPOINT format in .env file"
+        exit 1
+    fi
+
+    # Set MinIO console port (API port + 1)
+    MINIO_CONSOLE_PORT=$((MINIO_PORT + 1))
+    
+    # Use S3 credentials from environment
+    MINIO_ACCESS_KEY="$S3_ACCESS_KEY"
+    MINIO_SECRET_KEY="$S3_SECRET_KEY"
+    MINIO_BUCKET="$S3_BUCKET"
+}
 
 # Docker network name
 NETWORK_NAME=aerugo-dev-network
@@ -213,38 +253,20 @@ setup_minio_bucket() {
     mc anonymous set public "aerugo-local/$MINIO_BUCKET"
 }
 
-update_env_file() {
-    print_step "Updating .env file with new ports..."
+validate_env_file() {
+    print_step "Validating .env file configuration..."
     
-    # Create backup of original .env file
-    if [ -f .env ]; then
-        cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-    fi
+    # Check if required environment variables are set
+    required_vars=("DATABASE_URL" "REDIS_URL" "S3_ENDPOINT" "S3_BUCKET" "S3_ACCESS_KEY" "S3_SECRET_KEY")
     
-    # Update .env file with new ports
-    cat > .env << EOF
-# Database Configuration
-DATABASE_URL=postgresql://aerugo:development@localhost:${POSTGRES_PORT}/aerugo_dev
-
-# Redis Configuration
-REDIS_URL=redis://localhost:${REDIS_PORT}
-
-# S3 Configuration (MinIO)
-S3_ENDPOINT=http://localhost:${MINIO_PORT}
-S3_BUCKET=${MINIO_BUCKET}
-S3_ACCESS_KEY=${MINIO_ACCESS_KEY}
-S3_SECRET_KEY=${MINIO_SECRET_KEY}
-S3_REGION=us-east-1
-
-# Server Configuration
-LISTEN_ADDRESS=0.0.0.0:8080
-LOG_LEVEL=debug
-
-# JWT Configuration (generate a random secret for development)
-JWT_SECRET=your-super-secret-jwt-key-for-development
-EOF
+    for var in "${required_vars[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            print_error "Required environment variable $var is not set in .env file"
+            exit 1
+        fi
+    done
     
-    print_success ".env file updated with new configuration"
+    print_success ".env file configuration is valid"
 }
 
 show_connection_info() {
@@ -284,6 +306,11 @@ show_connection_info() {
 main() {
     print_header
     
+    # Load environment variables first
+    load_env_vars
+    parse_env_vars
+    validate_env_file
+    
     check_docker
     create_network
     setup_postgres
@@ -291,7 +318,6 @@ main() {
     setup_minio
     wait_for_services
     setup_minio_bucket
-    update_env_file
     show_connection_info
     
     echo -e "${GREEN}🎉 Development environment setup completed successfully!${NC}"
@@ -304,11 +330,15 @@ case "${1:-setup}" in
         main
         ;;
     "stop")
+        load_env_vars
+        parse_env_vars
         print_step "Stopping all containers..."
         docker stop aerugo-postgres aerugo-redis aerugo-minio 2>/dev/null || true
         print_success "All containers stopped"
         ;;
     "start")
+        load_env_vars
+        parse_env_vars
         print_step "Starting all containers..."
         docker start aerugo-postgres aerugo-redis aerugo-minio 2>/dev/null || true
         print_success "All containers started"
