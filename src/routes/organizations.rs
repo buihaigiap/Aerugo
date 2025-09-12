@@ -8,6 +8,7 @@ use axum::{
 pub fn organization_router() -> Router<AppState> {
     Router::new()
         // Organization management
+        .route("/", get(organizations::list_user_organizations))
         .route("/", post(organizations::create_organization))
         .route("/my", get(organizations::list_user_organizations))
         .route("/:id", get(organizations::get_organization))
