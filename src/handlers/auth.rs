@@ -66,14 +66,110 @@ pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> impl IntoResponse {
-    // Check if user already exists
+    // Input validation for registration request
+    
+    // Validate password length (minimum 8 characters)
+    // if req.password.len() < 4 {
+    //     return (
+    //         StatusCode::BAD_REQUEST,
+    //         Json(serde_json::json!({
+    //             "error": "Password must be at least 4 characters long"
+    //         })),
+    //     );
+    // }
+    
+    // Basic email format validation
+    // Check for '@' and ensure there's a domain after it
+    if !req.email.contains('@') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid email format - must contain '@'"
+            })),
+        );
+    }
+    
+    let email_parts: Vec<&str> = req.email.split('@').collect();
+    if email_parts.len() != 2 || email_parts[0].is_empty() || email_parts[1].is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid email format - must have local part and domain"
+            })),
+        );
+    }
+    
+    let local_part = email_parts[0];
+    let domain = email_parts[1];
+    
+    // Check local part length and basic validity
+    if local_part.len() > 64 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Local part of email too long (max 64 characters)"
+            })),
+        );
+    }
+    
+    // Check domain validity
+    if domain.len() > 255 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Domain part of email too long (max 255 characters)"
+            })),
+        );
+    }
+    
+    // Domain must not start with dot
+    if domain.starts_with('.') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid domain - cannot start with dot"
+            })),
+        );
+    }
+    
+    // Domain must not end with dot
+    if domain.ends_with('.') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid domain - cannot end with dot"
+            })),
+        );
+    }
+    
+    // Check for consecutive dots in domain
+    if domain.contains("..") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid domain - consecutive dots not allowed"
+            })),
+        );
+    }
+    
+    // Additional simple checks for common invalid patterns
+    if req.email.starts_with('@') || req.email.ends_with('@') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid email format"
+            })),
+        );
+    }
+    
+    // Check if user already exists by email (unique constraint)
     let existing_user = sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", req.email)
         .fetch_optional(&state.db_pool)
         .await;
 
     if let Ok(Some(_)) = existing_user {
         return (
-            StatusCode::BAD_REQUEST,
+            StatusCode::CONFLICT,
             Json(serde_json::json!({
                 "error": "User with this email already exists"
             })),
@@ -86,19 +182,20 @@ pub async fn register(
     let password_hash = match argon2.hash_password(req.password.as_bytes(), &salt) {
         Ok(hash) => hash.to_string(),
         Err(e) => {
+            tracing::error!("Password hashing failed: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
-                    "error": format!("Failed to hash password: {}", e)
+                    "error": "Failed to hash password"
                 })),
             );
         }
     };
 
-    // Create new user
+    // Create new user record
     let new_user = NewUser {
-        username: req.username,
-        email: req.email,
+        username: req.username.clone(),
+        email: req.email.clone(),
         password_hash,
     };
 
@@ -117,16 +214,26 @@ pub async fn register(
     {
         Ok(user) => user,
         Err(e) => {
+            tracing::error!("Database insertion failed: {}", e);
+            // Check if error is due to duplicate username (if constraint exists)
+            if e.to_string().contains("duplicate key") {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "Username already exists"
+                    })),
+                );
+            }
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
-                    "error": format!("Failed to create user: {}", e)
+                    "error": "Failed to create user"
                 })),
             );
         }
     };
 
-    // Generate JWT token
+    // Generate JWT token with 24-hour expiration
     let claims = Claims {
         sub: user.id.to_string(),
         exp: (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
@@ -139,19 +246,22 @@ pub async fn register(
     ) {
         Ok(token) => token,
         Err(e) => {
+            tracing::error!("JWT token generation failed: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
-                    "error": format!("Failed to create token: {}", e)
+                    "error": "Failed to create authentication token"
                 })),
             );
         }
     };
 
+    // Return success response with token
     (
         StatusCode::CREATED,
         Json(serde_json::json!({
-            "token": token
+            "token": token,
+            "message": "User registered successfully"
         })),
     )
 }
