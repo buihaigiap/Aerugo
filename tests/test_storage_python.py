@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import json
+import pytest
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -510,6 +511,39 @@ class StorageAPITester:
             assert len(content) >= 0, "Content length should be non-negative"
         
         return True
+
+
+# Pytest fixture for test instance
+@pytest.fixture(scope="module")
+def storage_tester():
+    """Fixture to provide StorageAPITester instance"""
+    return StorageAPITester()
+
+
+# Pytest test functions
+def test_basic_blob_operations_pytest(storage_tester):
+    """Test basic blob operations: put, get, exists, metadata, delete"""
+    assert storage_tester.test_basic_blob_operations(), "Basic blob operations test failed"
+
+
+def test_streaming_operations_pytest(storage_tester):
+    """Test streaming upload and download operations"""
+    assert storage_tester.test_streaming_operations(), "Streaming operations test failed"
+
+
+def test_concurrent_access_pytest(storage_tester):
+    """Test concurrent access to storage"""
+    assert storage_tester.test_concurrent_access(), "Concurrent access test failed"
+
+
+def test_error_conditions_pytest(storage_tester):
+    """Test error handling in storage operations"""
+    assert storage_tester.test_error_conditions(), "Error conditions test failed"
+
+
+def test_health_check_pytest(storage_tester):
+    """Test storage health check"""
+    assert storage_tester.test_health_check(), "Health check test failed"
 
 
 def main():

@@ -14,6 +14,7 @@ show_help() {
     echo "  -c, --coverage    Run tests with coverage report"
     echo "  --no-server       Don't start the Aerugo server (use if you already have one running)"
     echo "  --services-only   Start required services and exit (don't run tests)"
+    echo "  --unified         Run all tests in one unified pytest session"
     echo
     echo "Examples:"
     echo "  $0                          # Run all tests via pytest wrapper"
@@ -347,18 +348,45 @@ run_tests() {
     # Track test results for final summary
     local test_results=()
     
+    # Option to run all tests at once with pytest for cleaner output
+    if [[ "${1:-}" == "--unified" ]]; then
+        print_status "Running all tests with unified pytest output..."
+        if pytest $PYTEST_OPTIONS \
+            "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_docker_push_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_upload_s3_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_s3_upload_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_s3_download_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_s3_delete_api_pytest" \
+            "$TEST_DIR/test_docker_s3_apis.py::test_s3_list_api_pytest" \
+            "$TEST_DIR/test_storage_python.py::test_basic_blob_operations_pytest" \
+            "$TEST_DIR/test_storage_python.py::test_streaming_operations_pytest" \
+            "$TEST_DIR/test_storage_python.py::test_concurrent_access_pytest" \
+            "$TEST_DIR/test_storage_python.py::test_error_conditions_pytest" \
+            "$TEST_DIR/test_storage_python.py::test_health_check_pytest" \
+            "$TEST_DIR/test_s3_storage_python.py::test_s3_basic_operations_pytest" \
+            "$TEST_DIR/test_s3_storage_python.py::test_s3_multipart_upload_pytest" \
+            "$TEST_DIR/test_s3_storage_python.py::test_s3_error_handling_pytest" \
+            "$TEST_DIR/test_s3_storage_python.py::test_s3_health_check_pytest" \
+            "$TEST_TARGET"; then
+            print_success "All tests passed!"
+            return 0
+        else
+            print_error "Some tests failed!"
+            return 1
+        fi
+    fi
+    
     # First run Docker & S3 API tests
     print_status "Running Docker & S3 API tests..."
     if [ -f "$TEST_DIR/test_docker_s3_apis.py" ]; then
-        cd "$TEST_DIR"
-        if python3 test_docker_s3_apis.py; then
+        if pytest $PYTEST_OPTIONS "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_docker_push_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_upload_s3_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_upload_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_download_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_delete_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_list_api_pytest"; then
             print_success "Docker & S3 API tests passed"
             test_results+=("✅ Docker & S3 API tests: PASSED")
         else
             print_warning "Docker & S3 API tests failed, continuing with other tests..."
             test_results+=("❌ Docker & S3 API tests: FAILED")
         fi
-        cd ..
         echo
     else
         print_warning "Docker & S3 API test file not found at $TEST_DIR/test_docker_s3_apis.py"
@@ -369,15 +397,13 @@ run_tests() {
     # Run Storage API tests
     print_status "Running Storage API tests..."
     if [ -f "$TEST_DIR/test_storage_python.py" ]; then
-        cd "$TEST_DIR"
-        if python3 test_storage_python.py; then
+        if pytest $PYTEST_OPTIONS "$TEST_DIR/test_storage_python.py::test_basic_blob_operations_pytest" "$TEST_DIR/test_storage_python.py::test_streaming_operations_pytest" "$TEST_DIR/test_storage_python.py::test_concurrent_access_pytest" "$TEST_DIR/test_storage_python.py::test_error_conditions_pytest" "$TEST_DIR/test_storage_python.py::test_health_check_pytest"; then
             print_success "Storage API tests passed"
             test_results+=("✅ Storage API tests: PASSED")
         else
             print_warning "Storage API tests failed or ran in mock mode only, continuing..."
             test_results+=("⚠️  Storage API tests: FAILED/MOCK")
         fi
-        cd ..
         echo
     else
         print_warning "Storage API test file not found at $TEST_DIR/test_storage_python.py"
@@ -388,15 +414,13 @@ run_tests() {
     # Run S3 Storage API tests
     print_status "Running S3 Storage API tests..."
     if [ -f "$TEST_DIR/test_s3_storage_python.py" ]; then
-        cd "$TEST_DIR"
-        if python3 test_s3_storage_python.py; then
+        if pytest $PYTEST_OPTIONS "$TEST_DIR/test_s3_storage_python.py::test_s3_basic_operations_pytest" "$TEST_DIR/test_s3_storage_python.py::test_s3_multipart_upload_pytest" "$TEST_DIR/test_s3_storage_python.py::test_s3_error_handling_pytest" "$TEST_DIR/test_s3_storage_python.py::test_s3_health_check_pytest"; then
             print_success "S3 Storage API tests passed"
             test_results+=("✅ S3 Storage API tests: PASSED")
         else
             print_warning "S3 Storage API tests failed or ran in mock mode only, continuing..."
             test_results+=("⚠️  S3 Storage API tests: FAILED/MOCK")
         fi
-        cd ..
         echo
     else
         print_warning "S3 Storage API test file not found at $TEST_DIR/test_s3_storage_python.py"
@@ -450,17 +474,22 @@ run_tests() {
     echo
     
     # Count results
-    local passed_count=$(printf '%s\n' "${test_results[@]}" | grep -c "✅" || echo "0")
-    local failed_count=$(printf '%s\n' "${test_results[@]}" | grep -c "❌" || echo "0")
-    local skipped_count=$(printf '%s\n' "${test_results[@]}" | grep -c "⚠️" || echo "0")
+    local passed_count=$(printf '%s\n' "${test_results[@]}" | grep -c "✅" 2>/dev/null || echo "0")
+    local failed_count=$(printf '%s\n' "${test_results[@]}" | grep -c "❌" 2>/dev/null || echo "0")
+    local skipped_count=$(printf '%s\n' "${test_results[@]}" | grep -c "⚠️" 2>/dev/null || echo "0")
+    
+    # Ensure we have numeric values
+    passed_count=${passed_count:-0}
+    failed_count=${failed_count:-0}
+    skipped_count=${skipped_count:-0}
     
     print_status "Results: ${passed_count} passed, ${failed_count} failed, ${skipped_count} skipped/warnings"
     
     # Return success if at least some tests passed and no critical failures
-    if [ ${passed_count} -gt 0 ] && [ ${failed_count} -eq 0 ]; then
+    if [ "${passed_count}" -gt 0 ] && [ "${failed_count}" -eq 0 ]; then
         print_success "All available tests completed successfully!"
         return 0
-    elif [ ${passed_count} -gt 0 ]; then
+    elif [ "${passed_count}" -gt 0 ]; then
         print_warning "Tests completed with some failures, but continuing..."
         return 0
     else
