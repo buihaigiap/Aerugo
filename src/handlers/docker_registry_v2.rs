@@ -753,51 +753,169 @@ async fn get_upload_status_impl(
 }
 
 async fn upload_blob_chunk_impl(
-    _state: &AppState,
+    state: &AppState,
     name: &str,
     uuid: &str,
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    // TODO: Implement actual chunk upload to storage
     println!("Uploading blob chunk for {}/{}", name, uuid);
     println!("Content-Range: {:?}", headers.get("content-range"));
     println!("Chunk size: {}", body.len());
     
-    let location = format!("/v2/{}/blobs/uploads/{}", name, uuid);
-    let range = format!("0-{}", body.len() - 1);
+    // Store chunk data in temporary storage keyed by upload UUID
+    let temp_key = format!("uploads/{}/{}", name, uuid);
+    let body_len = body.len();
     
-    let mut response_headers = HeaderMap::new();
-    response_headers.insert("Location", HeaderValue::from_str(&location).unwrap());
-    response_headers.insert("Range", HeaderValue::from_str(&range).unwrap());
-    response_headers.insert("Content-Length", HeaderValue::from_static("0"));
-    response_headers.insert("Docker-Upload-UUID", HeaderValue::from_str(uuid).unwrap());
-    
-    (StatusCode::ACCEPTED, response_headers)
+    match state.storage.put_blob(&temp_key, body).await {
+        Ok(_) => {
+            println!("Blob chunk stored successfully");
+            
+            let location = format!("/v2/{}/blobs/uploads/{}", name, uuid);
+            let range = format!("0-{}", body_len - 1);
+            
+            let mut response_headers = HeaderMap::new();
+            response_headers.insert("Location", HeaderValue::from_str(&location).unwrap());
+            response_headers.insert("Range", HeaderValue::from_str(&range).unwrap());
+            response_headers.insert("Content-Length", HeaderValue::from_static("0"));
+            response_headers.insert("Docker-Upload-UUID", HeaderValue::from_str(uuid).unwrap());
+            
+            (StatusCode::ACCEPTED, response_headers)
+        },
+        Err(e) => {
+            eprintln!("Failed to store blob chunk: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new())
+        }
+    }
 }
 
 async fn complete_blob_upload_impl(
-    _state: &AppState,
+    state: &AppState,
     name: &str,
     uuid: &str,
     params: HashMap<String, String>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    // TODO: Implement actual blob finalization
     println!("Completing blob upload for {}/{}", name, uuid);
     
     let digest = params.get("digest").unwrap_or(&"sha256:unknown".to_string()).clone();
     println!("Expected digest: {}", digest);
     println!("Final chunk size: {}", body.len());
     
-    let location = format!("/v2/{}/blobs/{}", name, digest);
+    // Final blob key in S3
+    let blob_key = format!("blobs/{}", digest);
     
-    let mut headers = HeaderMap::new();
-    headers.insert("Location", HeaderValue::from_str(&location).unwrap());
-    headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
-    headers.insert("Content-Length", HeaderValue::from_static("0"));
+    // If there's a final chunk, append it to the existing data
+    if !body.is_empty() {
+        let temp_key = format!("uploads/{}/{}", name, uuid);
+        
+        // Get existing data from temp storage
+        let existing_data = match state.storage.get_blob(&temp_key).await {
+            Ok(Some(data)) => data,
+            Ok(None) | Err(_) => body.clone(), // If no existing data, use just this chunk
+        };
+        
+        // Combine existing data with final chunk
+        let mut final_data = existing_data.to_vec();
+        final_data.extend_from_slice(&body);
+        
+        // Store final blob in S3 with digest as key
+        match state.storage.put_blob(&blob_key, axum::body::Bytes::from(final_data)).await {
+            Ok(_) => {
+                println!("Blob stored successfully in S3 with key: {}", blob_key);
+                
+                // Clean up temporary upload
+                let _ = state.storage.delete_blob(&temp_key).await;
+                
+                // Store metadata in PostgreSQL
+                if let Err(e) = store_blob_metadata(state, name, &digest).await {
+                    eprintln!("Failed to store blob metadata: {}", e);
+                }
+                
+                let location = format!("/v2/{}/blobs/{}", name, digest);
+                let mut headers = HeaderMap::new();
+                headers.insert("Location", HeaderValue::from_str(&location).unwrap());
+                headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
+                headers.insert("Content-Length", HeaderValue::from_static("0"));
+                
+                (StatusCode::CREATED, headers)
+            },
+            Err(e) => {
+                eprintln!("Failed to store final blob: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new())
+            }
+        }
+    } else {
+        // No final chunk, just move temp data to final location
+        let temp_key = format!("uploads/{}/{}", name, uuid);
+        
+        match state.storage.get_blob(&temp_key).await {
+            Ok(Some(data)) => {
+                match state.storage.put_blob(&blob_key, data).await {
+                    Ok(_) => {
+                        println!("Blob stored successfully in S3 with key: {}", blob_key);
+                        
+                        // Clean up temporary upload
+                        let _ = state.storage.delete_blob(&temp_key).await;
+                        
+                        // Store metadata in PostgreSQL
+                        if let Err(e) = store_blob_metadata(state, name, &digest).await {
+                            eprintln!("Failed to store blob metadata: {}", e);
+                        }
+                        
+                        let location = format!("/v2/{}/blobs/{}", name, digest);
+                        let mut headers = HeaderMap::new();
+                        headers.insert("Location", HeaderValue::from_str(&location).unwrap());
+                        headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
+                        headers.insert("Content-Length", HeaderValue::from_static("0"));
+                        
+                        (StatusCode::CREATED, headers)
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to store final blob: {}", e);
+                        (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new())
+                    }
+                }
+            },
+            Ok(None) => {
+                eprintln!("No temp blob data found for upload: {}", uuid);
+                (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new())
+            },
+            Err(e) => {
+                eprintln!("Failed to retrieve temp blob data: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new())
+            }
+        }
+    }
+}
+
+async fn store_blob_metadata(state: &AppState, repository: &str, digest: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // First get or create repository
+    let repo_id: i64 = match sqlx::query_scalar!(
+        "SELECT id FROM repositories WHERE name = $1",
+        repository
+    ).fetch_optional(&state.db_pool).await? {
+        Some(id) => id,
+        None => {
+            // Create repository if it doesn't exist
+            sqlx::query_scalar!(
+                "INSERT INTO repositories (name, created_at) VALUES ($1, NOW()) RETURNING id",
+                repository
+            ).fetch_one(&state.db_pool).await?
+        }
+    };
     
-    (StatusCode::CREATED, headers)
+    // Insert blob metadata  
+    sqlx::query!(
+        "INSERT INTO blobs (repository_id, digest, media_type, size, created_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (repository_id, digest) DO NOTHING",
+        repo_id,
+        digest,
+        "application/octet-stream", // Default media type
+        0i64 // We don't have size info here, would need to track it
+    ).execute(&state.db_pool).await?;
+    
+    println!("Stored blob metadata: {} for repository: {} (id: {})", digest, repository, repo_id);
+    Ok(())
 }
 
 async fn cancel_blob_upload_impl(

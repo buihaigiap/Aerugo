@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
         .context("Failed to create database pool")?;
 
         info!("✅ Database pool established with {} max connections", 
-          production_config.database.max_connections);
+          production_config.database_pool.max_connections);
 
     // Run database migrations
     sqlx::migrate!("./migrations")

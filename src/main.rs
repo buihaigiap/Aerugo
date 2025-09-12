@@ -1,25 +1,10 @@
+use aerugo::{create_app, AppState};
+use aerugo::config::Settings;
+use aerugo::db;
+use aerugo::storage::{Storage, s3::S3Storage};
 use anyhow::Result;
-use axum::Router;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
-
-mod auth;
-mod config;
-mod database;
-mod db;
-mod handlers;
-mod models;
-mod openapi;
-mod routes;
-// mod storage; // Temporarily disabled due to AWS SDK compatibility issues
-
-use crate::config::settings::Settings;
-
-#[derive(Clone)]
-pub struct AppState {
-    db_pool: sqlx::PgPool,
-    config: Settings,
-}
+use std::sync::Arc;
+use secrecy::ExposeSecret;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,33 +20,43 @@ async fn main() -> Result<()> {
     let db_pool = db::create_pool(&settings).await?;
     println!("Database connection initialized successfully");
 
-    // Shared application state
+    // Initialize S3 storage
+    println!("Initializing S3 storage...");
+    let s3_config = aerugo::storage::s3::S3Config {
+        endpoint: settings.storage.endpoint.clone(),
+        bucket: settings.storage.bucket_name().to_string(),
+        region: settings.storage.region.clone(),
+        auth_method: aerugo::storage::s3::S3AuthMethod::Static {
+            access_key_id: settings.storage.access_key_id.expose_secret().clone(),
+            secret_access_key: settings.storage.secret_access_key.expose_secret().clone(),
+        },
+        use_path_style: settings.storage.use_path_style,
+        retry_attempts: Some(3),
+        multipart_threshold: Some(64 * 1024 * 1024), // 64MB
+        part_size: Some(8 * 1024 * 1024), // 8MB
+    };
+    
+    let storage: Arc<dyn Storage> = Arc::new(
+        S3Storage::new(&s3_config)
+            .await
+            .expect("Failed to initialize S3 storage")
+    );
+    println!("S3 storage initialized successfully");
+
+    // Create shared application state
     let state = AppState {
         db_pool,
         config: settings.clone(),
+        storage,
+        cache: None, // TODO: Initialize Redis cache
     };
     println!("Application state created successfully");
 
-    // Register API documentation
-    println!("Registering API documentation...");
-    let openapi = openapi::ApiDoc::openapi();
-    println!("API documentation registered successfully");
-    
-    // Build our application with routes
-    println!("Building application router...");
-    let app = Router::new()
-        .route("/health", axum::routing::get(handlers::health::check))
-        .nest("/api/v1", routes::api::api_router())
-        // Docker Registry V2 API
-        .nest("/v2", routes::docker_registry_v2::docker_registry_v2_router())
-        // Serve Swagger UI
-        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
-        .layer(tower_http::cors::CorsLayer::permissive()) // Add CORS support
-        .with_state(state);
-    println!("Application router built successfully");
+    // Create application using lib.rs
+    let app = create_app(state).await;
+    println!("Application created successfully");
 
-    // Run it
+    // Run server
     println!("Preparing to start server...");
     let listen_address = settings.server.bind_address.clone();
     println!("Listen address: {}", listen_address);
