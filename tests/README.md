@@ -12,16 +12,25 @@ The integration test suite performs end-to-end testing by:
 4. **Test Data Seeding**: Creating test data in the database
 5. **Server Startup**: Building and starting the Aerugo server
 6. **API Testing**: Testing all API endpoints organized by functionality
+7. **Docker Registry E2E**: Testing real Docker client push/pull operations
 
 ## Test Organization
 
-### Test Modules
+### Core Test Modules
 
 - **`test_health.py`**: Health endpoint tests
 - **`test_auth.py`**: Authentication and authorization tests
 - **`test_users.py`**: User management tests
 - **`test_organizations.py`**: Organization management tests
 - **`test_repositories.py`**: Repository/registry functionality tests
+- **`test_complete_apis.py`**: Complete API test suite
+
+### Docker Registry E2E Tests
+
+- **`test_e2e_docker_registry.py`**: Comprehensive end-to-end Docker registry tests
+- **`run_e2e_docker_tests.sh`**: Bash script for complete E2E testing workflow
+- **`docker_registry_compatibility.py`**: Docker Registry V2 API compatibility tests
+- **`docker_e2e_README.md`**: Detailed documentation for Docker E2E tests
 
 ### Support Modules
 
@@ -40,12 +49,27 @@ The integration test suite performs end-to-end testing by:
 
 ### Running Tests
 
-1. **Using the test runner script (recommended)**:
+1. **Standard Integration Tests (recommended)**:
    ```bash
    ./tests/run_tests.sh
    ```
 
-2. **Manual execution**:
+2. **Docker Registry E2E Tests**:
+   ```bash
+   # Complete E2E workflow with Docker client
+   ./tests/run_e2e_docker_tests.sh
+   
+   # Quick API validation only
+   ./tests/run_e2e_docker_tests.sh quick
+   
+   # Python E2E test suite
+   python3 tests/test_e2e_docker_registry.py
+   
+   # Docker Registry V2 API compatibility
+   python3 tests/docker_registry_compatibility.py
+   ```
+
+3. **Manual execution**:
    ```bash
    cd tests
    python3 -m venv venv

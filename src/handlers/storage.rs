@@ -1,5 +1,5 @@
 use axum::{
-    extract::Path,
+    extract::{Path, State},
     http::{StatusCode, header},
     response::{Json, Response},
     body::Body,
@@ -7,6 +7,7 @@ use axum::{
 use axum_extra::extract::Multipart;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::AppState;
 
 // Request/Response structures
 #[derive(Deserialize)]
@@ -69,7 +70,10 @@ fn get_mock_metadata() -> &'static mut HashMap<String, BlobMetadataResponse> {
     }
 }
 
-pub async fn upload_blob(mut multipart: Multipart) -> Result<Json<UploadResponse>, StatusCode> {
+pub async fn upload_blob(
+    State(state): State<AppState>,
+    mut multipart: Multipart
+) -> Result<Json<UploadResponse>, StatusCode> {
     let mut digest = String::new();
     let mut file_data: Vec<u8> = Vec::new();
 
@@ -87,44 +91,55 @@ pub async fn upload_blob(mut multipart: Multipart) -> Result<Json<UploadResponse
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Store in mock storage
-    let storage = get_mock_storage();
-    let metadata_store = get_mock_metadata();
+    // Store using real storage backend from AppState
+    let key = format!("blobs/{}", digest);
+    let data_bytes = axum::body::Bytes::from(file_data.clone());
     
-    storage.insert(digest.clone(), file_data.clone());
-    metadata_store.insert(digest.clone(), BlobMetadataResponse {
-        size: file_data.len() as u64,
-        digest: digest.clone(),
-        created_at: chrono::Utc::now().to_rfc3339(),
-        content_type: Some("application/octet-stream".to_string()),
-    });
-
-    Ok(Json(UploadResponse {
-        success: true,
-        message: "Blob uploaded successfully".to_string(),
-        digest,
-    }))
-}
-
-pub async fn download_blob(Path(digest): Path<String>) -> Result<Response<Body>, StatusCode> {
-    let storage = get_mock_storage();
-    
-    if let Some(data) = storage.get(&digest) {
-        let response = Response::builder()
-            .header(header::CONTENT_TYPE, "application/octet-stream")
-            .header(header::CONTENT_LENGTH, data.len())
-            .body(Body::from(data.clone()))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        
-        Ok(response)
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    match state.storage.put_blob(&key, data_bytes).await {
+        Ok(_) => {
+            // Also save metadata to database
+            // TODO: Implement database insertion for blob metadata
+            
+            Ok(Json(UploadResponse {
+                success: true,
+                message: "Blob uploaded successfully".to_string(),
+                digest,
+            }))
+        },
+        Err(e) => {
+            eprintln!("Storage error: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-pub async fn blob_exists(Path(digest): Path<String>) -> Json<ExistsResponse> {
-    let storage = get_mock_storage();
-    let exists = storage.contains_key(&digest);
+pub async fn download_blob(
+    State(state): State<AppState>,
+    Path(digest): Path<String>
+) -> Result<Response<Body>, StatusCode> {
+    let key = format!("blobs/{}", digest);
+    
+    match state.storage.get_blob(&key).await {
+        Ok(Some(data)) => {
+            let response = Response::builder()
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .header(header::CONTENT_LENGTH, data.len())
+                .body(Body::from(data))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            
+            Ok(response)
+        },
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
+pub async fn blob_exists(
+    State(state): State<AppState>,
+    Path(digest): Path<String>
+) -> Json<ExistsResponse> {
+    let key = format!("blobs/{}", digest);
+    let exists = state.storage.blob_exists(&key).await.unwrap_or(false);
     
     Json(ExistsResponse {
         exists,
@@ -132,29 +147,48 @@ pub async fn blob_exists(Path(digest): Path<String>) -> Json<ExistsResponse> {
     })
 }
 
-pub async fn blob_metadata(Path(digest): Path<String>) -> Result<Json<BlobMetadataResponse>, StatusCode> {
-    let metadata_store = get_mock_metadata();
+pub async fn blob_metadata(
+    State(state): State<AppState>,
+    Path(digest): Path<String>
+) -> Result<Json<BlobMetadataResponse>, StatusCode> {
+    // TODO: Query metadata from PostgreSQL database
+    // For now, try to get from storage and create basic metadata
+    let key = format!("blobs/{}", digest);
     
-    if let Some(metadata) = metadata_store.get(&digest) {
-        Ok(Json(metadata.clone()))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    match state.storage.get_blob(&key).await {
+        Ok(Some(data)) => {
+            Ok(Json(BlobMetadataResponse {
+                size: data.len() as u64,
+                digest: digest.clone(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                content_type: Some("application/octet-stream".to_string()),
+            }))
+        },
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 
-pub async fn delete_blob(Path(digest): Path<String>) -> Json<DeleteResponse> {
-    let storage = get_mock_storage();
-    let metadata_store = get_mock_metadata();
+pub async fn delete_blob(
+    State(state): State<AppState>,
+    Path(digest): Path<String>
+) -> Json<DeleteResponse> {
+    let key = format!("blobs/{}", digest);
     
-    let existed = storage.remove(&digest).is_some();
-    metadata_store.remove(&digest);
+    let success = match state.storage.delete_blob(&key).await {
+        Ok(existed) => {
+            // TODO: Also delete from PostgreSQL metadata
+            existed
+        },
+        Err(_) => false
+    };
     
     Json(DeleteResponse {
-        success: existed,
-        message: if existed {
+        success,
+        message: if success {
             "Blob deleted successfully".to_string()
         } else {
-            "Blob not found".to_string()
+            "Failed to delete blob".to_string()
         },
     })
 }
@@ -190,9 +224,12 @@ pub async fn upload_blob_streaming(
     }))
 }
 
-pub async fn download_blob_streaming(Path(digest): Path<String>) -> Result<Response<Body>, StatusCode> {
-    // Same as regular download for this mock implementation
-    download_blob(Path(digest)).await
+pub async fn download_blob_streaming(
+    State(state): State<AppState>,
+    Path(digest): Path<String>
+) -> Result<Response<Body>, StatusCode> {
+    // Same as regular download for this implementation
+    download_blob(State(state), Path(digest)).await
 }
 
 pub async fn health_check() -> Json<HealthResponse> {

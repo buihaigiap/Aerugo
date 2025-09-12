@@ -1,6 +1,7 @@
 use utoipa::OpenApi;
 use crate::handlers::{
     auth,
+    docker_registry_v2,
     health,
     organizations,
     registry,
@@ -10,6 +11,7 @@ use crate::models::{
     organizations::{Organization, CreateOrganizationRequest, UpdateOrganizationRequest, AddMemberRequest, UpdateMemberRequest, OrganizationMember},
 };
 use crate::handlers::registry::{Repository, ImageInfo};
+use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
 
 /// Generate the OpenAPI documentation for the entire API
 #[derive(OpenApi)]
@@ -38,6 +40,22 @@ use crate::handlers::registry::{Repository, ImageInfo};
         registry::list_repositories,
         registry::get_repository,
         registry::list_images,
+        
+        // Docker Registry V2 API endpoints
+        docker_registry_v2::base_api,
+        docker_registry_v2::get_catalog,
+        docker_registry_v2::get_manifest,
+        docker_registry_v2::head_manifest,
+        docker_registry_v2::put_manifest,
+        docker_registry_v2::delete_manifest,
+        docker_registry_v2::get_blob,
+        docker_registry_v2::head_blob,
+        docker_registry_v2::start_blob_upload,
+        docker_registry_v2::upload_blob_chunk,
+        docker_registry_v2::complete_blob_upload,
+        docker_registry_v2::get_upload_status,
+        docker_registry_v2::cancel_blob_upload,
+        docker_registry_v2::list_tags,
     ),
     components(
         schemas(
@@ -62,6 +80,14 @@ use crate::handlers::registry::{Repository, ImageInfo};
             // Registry schemas
             Repository,
             ImageInfo,
+            
+            // Docker Registry V2 API schemas
+            ApiVersionResponse,
+            CatalogResponse,
+            TagListResponse,
+            BlobUploadResponse,
+            ErrorResponse,
+            RegistryError,
         )
     ),
     tags(
@@ -69,6 +95,7 @@ use crate::handlers::registry::{Repository, ImageInfo};
         (name = "auth", description = "Authentication endpoints"),
         (name = "organizations", description = "Organization management endpoints"),
         (name = "registry", description = "Container registry operations"),
+        (name = "docker-registry-v2", description = "Docker Registry V2 API - OCI Distribution Specification"),
     )
 )]
 pub struct ApiDoc;
