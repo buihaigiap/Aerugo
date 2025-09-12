@@ -10,6 +10,11 @@ use sqlx::{FromRow, PgPool};
 use validator::Validate;
 use utoipa::ToSchema;
 
+use axum_extra::headers::{Authorization, authorization::Bearer};
+use axum_extra::TypedHeader;
+use secrecy::ExposeSecret;
+use crate::auth::extract_user_id;
+
 use crate::{
     models::organizations::{
         AddMemberRequest, CreateOrganizationRequest, Organization, OrganizationMember,
@@ -28,10 +33,14 @@ use crate::{
         (status = 201, description = "Organization created successfully"),
         (status = 400, description = "Validation failed or bad request"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn create_organization(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Json(req): Json<CreateOrganizationRequest>,
 ) -> impl IntoResponse {
     // Validate request
@@ -45,8 +54,17 @@ pub async fn create_organization(
         );
     }
 
-    // TODO: Get user_id from JWT token when auth middleware is implemented
-    let user_id = 1i64; // Placeholder
+    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match create_org_internal(&state.db_pool, req, user_id).await {
         Ok(organization) => (
@@ -79,6 +97,9 @@ pub async fn create_organization(
         (status = 200, description = "Organization details retrieved successfully"),
         (status = 404, description = "Organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn get_organization(
@@ -125,10 +146,14 @@ pub async fn get_organization(
         (status = 403, description = "Insufficient permissions"),
         (status = 404, description = "Organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn update_organization(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateOrganizationRequest>,
 ) -> impl IntoResponse {
@@ -142,8 +167,17 @@ pub async fn update_organization(
         );
     }
 
-    // TODO: Get user_id from JWT token
-    let user_id = 1i64; // Placeholder
+    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match update_org_by_id_internal(&state.db_pool, id, req, user_id).await {
         Ok(organization) => (
@@ -177,14 +211,27 @@ pub async fn update_organization(
         (status = 403, description = "Only owners can delete organizations"),
         (status = 404, description = "Organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn delete_organization(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    // TODO: Get user_id from JWT token
-    let user_id = 1i64; // Placeholder
+    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match delete_org_by_id_internal(&state.db_pool, id, user_id).await {
         Ok(_) => (StatusCode::NO_CONTENT, Json(serde_json::json!({}))),
@@ -213,14 +260,28 @@ pub async fn delete_organization(
         (status = 403, description = "Access denied: not a member of this organization"),
         (status = 404, description = "Organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn get_organization_members(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    // TODO: Get user_id from JWT token
-    let user_id = Some(1i64); // Placeholder
+    let extracted_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
+    let user_id = Some(extracted_id);
 
     match get_members_by_org_id_internal(&state.db_pool, id, user_id).await {
         Ok(members) => (
@@ -256,10 +317,14 @@ pub async fn get_organization_members(
         (status = 403, description = "Insufficient permissions to add members"),
         (status = 404, description = "User or organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn add_organization_member(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path(id): Path<i64>,
     Json(req): Json<AddMemberRequest>,
 ) -> impl IntoResponse {
@@ -273,8 +338,17 @@ pub async fn add_organization_member(
         );
     }
 
-    // TODO: Get user_id from JWT token
-    let inviter_id = 1i64; // Placeholder
+    let inviter_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match add_member_by_org_id_internal(&state.db_pool, id, req, inviter_id).await {
         Ok(member) => (
@@ -311,15 +385,28 @@ pub async fn add_organization_member(
         (status = 403, description = "Insufficient permissions to modify this member"),
         (status = 404, description = "Member or organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn update_member_role(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path((id, member_id)): Path<(i64, i64)>,
     Json(req): Json<UpdateMemberRequest>,
 ) -> impl IntoResponse {
-    // TODO: Get user_id from JWT token
-    let updater_id = 1i64; // Placeholder
+    let updater_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match update_member_role_by_org_id_internal(&state.db_pool, id, member_id, req, updater_id)
         .await
@@ -356,14 +443,27 @@ pub async fn update_member_role(
         (status = 403, description = "Insufficient permissions to remove this member"),
         (status = 404, description = "Member or organization not found"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 pub async fn remove_organization_member(
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path((id, member_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    // TODO: Get user_id from JWT token
-    let remover_id = 1i64; // Placeholder
+    let remover_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match remove_member_internal(&state.db_pool, id, member_id, remover_id).await {
         Ok(_) => (StatusCode::NO_CONTENT, Json(serde_json::json!({}))),
@@ -387,11 +487,26 @@ pub async fn remove_organization_member(
     responses(
         (status = 200, description = "List of user's organizations retrieved successfully"),
         (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
-pub async fn list_user_organizations(State(state): State<AppState>) -> impl IntoResponse {
-    // TODO: Get user_id from JWT token
-    let user_id = 1i64; // Placeholder
+pub async fn list_user_organizations(
+    State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
+) -> impl IntoResponse {
+    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(status) => {
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": "Unauthorized"
+                })),
+            );
+        }
+    };
 
     match list_user_orgs_internal(&state.db_pool, user_id).await {
         Ok(organizations) => (

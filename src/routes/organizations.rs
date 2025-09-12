@@ -24,7 +24,7 @@ pub fn organization_router() -> Router<AppState> {
             post(organizations::add_organization_member),
         )
         .route(
-            "/:id/members/:member_id/role",
+            "/:id/members/:member_id",
             put(organizations::update_member_role),
         )
         .route(

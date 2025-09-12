@@ -1,4 +1,7 @@
 use utoipa::OpenApi;
+use utoipa::Modify;
+use utoipa::openapi::security::{SecurityScheme, Http, HttpAuthScheme};
+
 use crate::handlers::{
     auth,
     docker_registry_v2,
@@ -8,10 +11,27 @@ use crate::handlers::{
 };
 use crate::models::{
     user::UserResponse,
-    organizations::{Organization, CreateOrganizationRequest, UpdateOrganizationRequest, AddMemberRequest, UpdateMemberRequest, OrganizationMember},
+    organizations::{
+        Organization, CreateOrganizationRequest, UpdateOrganizationRequest,
+        AddMemberRequest, UpdateMemberRequest, OrganizationMember,
+    },
 };
 use crate::handlers::registry::{Repository, ImageInfo};
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
+
+/// Security addon để thêm Bearer Auth vào OpenAPI
+pub struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearerAuth",
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+            );
+        }
+    }
+}
 
 /// Generate the OpenAPI documentation for the entire API
 #[derive(OpenApi)]
@@ -19,12 +39,12 @@ use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, T
     paths(
         // Health endpoints
         health::check,
-        
+
         // Auth endpoints
         auth::register,
         auth::login,
         auth::refresh,
-        
+
         // Organization endpoints
         organizations::create_organization,
         organizations::get_organization,
@@ -35,7 +55,7 @@ use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, T
         organizations::add_organization_member,
         organizations::update_member_role,
         organizations::remove_organization_member,
-        
+
         // Registry endpoints
         registry::list_repositories,
         registry::get_repository,
@@ -61,14 +81,14 @@ use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, T
         schemas(
             // Health schemas
             health::HealthResponse,
-            
+
             // User schemas
             UserResponse,
             auth::RegisterRequest,
             auth::LoginRequest,
             auth::RefreshRequest,
             auth::AuthResponse,
-            
+
             // Organization schemas
             Organization,
             CreateOrganizationRequest,
@@ -76,7 +96,7 @@ use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, T
             AddMemberRequest,
             UpdateMemberRequest,
             OrganizationMember,
-            
+
             // Registry schemas
             Repository,
             ImageInfo,
@@ -96,6 +116,7 @@ use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, T
         (name = "organizations", description = "Organization management endpoints"),
         (name = "registry", description = "Container registry operations"),
         (name = "docker-registry-v2", description = "Docker Registry V2 API - OCI Distribution Specification"),
-    )
+    ),
+      modifiers(&SecurityAddon)  // 👈 add this to get Bearer Auth
 )]
 pub struct ApiDoc;
