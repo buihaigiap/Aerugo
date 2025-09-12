@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["buihaigiap"]
 description = "A next-generation, distributed, and multi-tenant container registry"
 license = "Apache-2.0"
+default-run = "aerugo"
 
 [dependencies]
 axum = { version = "0.7", features = ["http2"] }
@@ -48,8 +49,16 @@ hex = "0.4"
 async-trait = "0.1"
 bytes = "1.4"
 futures = "0.3"
+base64 = "0.21"
 tokio-util = { version = "0.7", features = ["io"] }
 hyper-rustls = { version = "0.27.7", features = ["http2"] }
 rusoto_core = "0.48.0"
 rusoto_s3 = "0.48.0"
 tokio-stream = "0.1.17"
+
+# Performance optimization dependencies
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "script"] }
+moka = { version = "0.12", features = ["future"] }
+metrics = "0.22"
+metrics-prometheus = "0.6"
+bb8-redis = "0.14"

@@ -29,6 +29,13 @@ pub struct ServerSettings {
     pub log_level: String,
 }
 
+impl ServerSettings {
+    pub fn address(&self) -> String {
+        // Sử dụng bind_address trực tiếp vì nó đã chứa cả host:port
+        self.bind_address.clone()
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct DatabaseSettings {
     pub host: String,
@@ -42,6 +49,19 @@ pub struct DatabaseSettings {
     pub max_connections: u32,
 }
 
+impl DatabaseSettings {
+    pub fn url(&self) -> String {
+        format!(
+            "postgresql://{}:{}@{}:{}/{}",
+            self.username,
+            self.password.expose_secret(),
+            self.host,
+            self.port,
+            self.database_name
+        )
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Validate)]
 pub struct StorageSettings {
     #[validate(custom = "validate_url")]
@@ -51,6 +71,12 @@ pub struct StorageSettings {
     pub access_key_id: Secret<String>,
     pub secret_access_key: Secret<String>,
     pub use_path_style: bool,
+}
+
+impl StorageSettings {
+    pub fn bucket_name(&self) -> &str {
+        &self.bucket
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
