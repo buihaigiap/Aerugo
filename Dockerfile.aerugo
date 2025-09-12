@@ -1,0 +1,36 @@
+# Production Dockerfile for Aerugo Registry
+FROM rust:1.80 as builder
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+# Build the application in release mode
+RUN cargo build --release --bin aerugo
+
+# Runtime stage - use slim debian for smaller size
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the binary
+COPY --from=builder /app/target/release/aerugo /usr/local/bin/aerugo
+
+# Create non-root user for security
+RUN useradd -r -s /bin/false -m aerugo
+
+# Set up working directory
+RUN mkdir -p /app && chown aerugo:aerugo /app
+WORKDIR /app
+
+USER aerugo
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/v2/ || exit 1
+
+CMD ["aerugo"]
