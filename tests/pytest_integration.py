@@ -101,6 +101,40 @@ def test_token_refresh():
 def test_logout():
     auth_tests.test_logout()
 
+# Additional Auth Edge Case Tests
+def test_registration_invalid_email_formats():
+    auth_tests.test_registration_invalid_email_formats()
+
+def test_registration_short_password():
+    auth_tests.test_registration_short_password()
+
+def test_registration_duplicate_username():
+    auth_tests.test_registration_duplicate_username()
+
+def test_login_with_both_credentials():
+    auth_tests.test_login_with_both_credentials()
+
+def test_login_empty_fields():
+    auth_tests.test_login_empty_fields()
+
+def test_me_with_expired_token():
+    auth_tests.test_me_with_expired_token()
+
+def test_refresh_invalid_token():
+    auth_tests.test_refresh_invalid_token()
+
+def test_registration_special_characters():
+    auth_tests.test_registration_special_characters()
+
+def test_login_case_sensitivity():
+    auth_tests.test_login_case_sensitivity()
+
+def test_registration_max_length():
+    auth_tests.test_registration_max_length()
+
+def test_rapid_consecutive_registrations():
+    auth_tests.test_rapid_consecutive_registrations()
+
 # Organization Tests  
 def test_organization_creation():
     org_tests.test_organization_creation()
