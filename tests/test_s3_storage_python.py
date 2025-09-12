@@ -13,6 +13,7 @@ import sys
 import time
 import json
 import boto3
+import pytest
 from botocore.exceptions import ClientError
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -369,6 +370,34 @@ class S3StorageAPITester:
                 logger.info(f"❌ {test_name} validation error: {e}")
         
         return passed, total
+
+
+# Pytest fixture for test instance
+@pytest.fixture(scope="module")
+def s3_tester():
+    """Fixture to provide S3StorageAPITester instance"""
+    return S3StorageAPITester()
+
+
+# Pytest test functions
+def test_s3_basic_operations_pytest(s3_tester):
+    """Test S3 basic operations: put, exists, get, delete"""
+    assert s3_tester.test_s3_basic_operations(), "S3 basic operations test failed"
+
+
+def test_s3_multipart_upload_pytest(s3_tester):
+    """Test S3 multipart upload for large files"""
+    assert s3_tester.test_multipart_upload(), "S3 multipart upload test failed"
+
+
+def test_s3_error_handling_pytest(s3_tester):
+    """Test S3 error handling"""
+    assert s3_tester.test_error_handling(), "S3 error handling test failed"
+
+
+def test_s3_health_check_pytest(s3_tester):
+    """Test S3 storage health check"""
+    assert s3_tester.test_s3_health_check(), "S3 health check test failed"
 
 
 def main():

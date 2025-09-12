@@ -8,6 +8,7 @@ import tempfile
 import os
 import sys
 import logging
+import pytest
 from pathlib import Path
 
 # Setup logging
@@ -462,6 +463,52 @@ CMD echo "Hello from Aerugo test image"
         except ImportError as e:
             logger.error(f"Missing dependency: {e}")
             return False
+
+
+# Pytest fixture for test instance
+@pytest.fixture(scope="module")
+def docker_s3_tester():
+    """Fixture to provide DockerS3APITester instance"""
+    tester = DockerS3APITester()
+    tester.setup()
+    yield tester
+    tester.teardown()
+
+
+# Pytest test functions
+def test_docker_build_api_pytest(docker_s3_tester):
+    """Test Docker build API"""
+    assert docker_s3_tester.test_docker_build_api(), "Docker build API test failed"
+
+
+def test_docker_push_api_pytest(docker_s3_tester):
+    """Test Docker push API"""
+    assert docker_s3_tester.test_docker_push_api(), "Docker push API test failed"
+
+
+def test_docker_build_upload_s3_api_pytest(docker_s3_tester):
+    """Test Docker build with S3 upload API"""
+    assert docker_s3_tester.test_docker_build_upload_s3_api(), "Docker build upload S3 API test failed"
+
+
+def test_s3_upload_api_pytest(docker_s3_tester):
+    """Test S3 upload API"""
+    assert docker_s3_tester.test_s3_upload_api(), "S3 upload API test failed"
+
+
+def test_s3_download_api_pytest(docker_s3_tester):
+    """Test S3 download API"""
+    assert docker_s3_tester.test_s3_download_api(), "S3 download API test failed"
+
+
+def test_s3_delete_api_pytest(docker_s3_tester):
+    """Test S3 delete API"""
+    assert docker_s3_tester.test_s3_delete_api(), "S3 delete API test failed"
+
+
+def test_s3_list_api_pytest(docker_s3_tester):
+    """Test S3 list API"""
+    assert docker_s3_tester.test_s3_list_api(), "S3 list API test failed"
 
 
 def main():
