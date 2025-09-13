@@ -6,4 +6,5 @@ pub mod docker_registry_v2_tests;
 pub mod health;
 pub mod organizations;
 pub mod registry;
+pub mod repositories;
 pub mod storage;
