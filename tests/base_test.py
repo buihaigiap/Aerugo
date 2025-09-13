@@ -28,7 +28,6 @@ class BaseTestCase:
     
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.api_base = API_BASE  # Make API_BASE available as instance attribute
     
     def make_request(self, method: str, endpoint: str, data: Optional[Dict] = None,
                     headers: Optional[Dict] = None, token: Optional[str] = None,
