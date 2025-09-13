@@ -12,56 +12,124 @@ use utoipa;
 
 use crate::{
     AppState,
-    auth::extract_user_id,
+    auth::{extract_user_id, verify_token},
     models::repository::{Repository, RepositoryPermission, CreateRepositoryRequest, SetRepositoryPermissionsRequest, RepositoryDetailsResponse},
+    models::repository_with_org::{RepositoryWithOrg, RepositoryWithOrgRow},
 };
 
-/// List all repositories in an organization
-/// GET /api/v1/repos/{namespace}/repositories
+/// List repositories
+/// 
+/// List all repositories that the authenticated user has access to.
+/// The user can access repositories if they:
+/// - Created the repository (created_by)
+/// - Have explicit permissions (repository_permissions)
+/// - Are a member of the organization that owns the repository
+/// 
+/// Optional namespace parameter can be used to filter repositories by organization.
+/// 
+/// GET /api/v1/repositories/{namespace?}
 #[utoipa::path(
     get,
-    path = "/api/v1/repos/{namespace}/repositories",
+    path = "/api/v1/repos/repositories/{namespace}",
     tag = "repositories",
     params(
-        ("namespace" = String, Path, description = "Organization namespace/name")
+        ("namespace" = Option<String>, Path, description = "Optional organization namespace to filter repositories. If not provided or empty, returns all accessible repositories")
+    ),
+    security(
+        ("bearerAuth" = [])
     ),
     responses(
-        (status = 200, description = "List of repositories retrieved successfully", body = Vec<Repository>),
-        (status = 404, description = "Organization not found"),
-        (status = 500, description = "Internal server error")
+        (status = 200, description = "List of repositories retrieved successfully", body = Vec<RepositoryWithOrg>),
+        (status = 401, description = "Unauthorized - Bearer token is missing or invalid"),
+        (status = 500, description = "Internal server error - Database error or internal exception")
     )
 )]
 pub async fn list_repositories(
     State(state): State<AppState>,
-    Path(namespace): Path<String>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    namespace: Option<Path<String>>,
 ) -> Response {
-    // First get the organization ID from namespace
-    let org = match sqlx::query!(
-        "SELECT id FROM organizations WHERE name = $1",
-        namespace
-    )
-    .fetch_optional(&state.db_pool)
-    .await {
-        Ok(Some(org)) => org,
-        Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({
-                "error": "Organization not found"
-            }))).into_response()
-        }
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "error": format!("Database error: {}", e)
+    // Extract user ID from JWT token
+    let claims = match verify_token(auth.token(), state.config.auth.jwt_secret.expose_secret().as_bytes()) {
+        Ok(claims) => claims,
+        Err(status) => {
+            return (status, Json(json!({
+                "error": "Unauthorized"
             }))).into_response()
         }
     };
 
-    // Get all repositories for the organization
-    match sqlx::query_as!(Repository,
-        "SELECT * FROM repositories WHERE organization_id = $1",
-        org.id
-    )
-    .fetch_all(&state.db_pool)
-    .await {
+    let user_id = match claims.sub.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "Invalid user ID in token"
+            }))).into_response()
+        }
+    };
+    
+    // Build and execute query based on namespace
+    let repositories = if let Some(Path(ns)) = namespace {
+        if !ns.is_empty() {
+            // Query with namespace filter
+            sqlx::query_as::<_, RepositoryWithOrgRow>(
+                r#"
+                SELECT DISTINCT 
+                    r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+                    o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+                FROM repositories r
+                JOIN organizations o ON r.organization_id = o.id
+                LEFT JOIN repository_permissions rp ON r.id = rp.repository_id
+                LEFT JOIN organization_members om ON r.organization_id = om.organization_id
+                WHERE (rp.user_id = $1 OR r.created_by = $1 OR om.user_id = $1)
+                AND o.name = $2
+                "#
+            )
+            .bind(user_id)
+            .bind(ns)
+            .fetch_all(&state.db_pool)
+            .await
+            .map(|rows| rows.into_iter().map(|row| RepositoryWithOrg::from(row)).collect::<Vec<RepositoryWithOrg>>())
+        } else {
+            // Query without namespace filter
+            sqlx::query_as::<_, RepositoryWithOrgRow>(
+                r#"
+                SELECT DISTINCT 
+                    r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+                    o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+                FROM repositories r
+                JOIN organizations o ON r.organization_id = o.id
+                LEFT JOIN repository_permissions rp ON r.id = rp.repository_id
+                LEFT JOIN organization_members om ON r.organization_id = om.organization_id
+                WHERE rp.user_id = $1 OR r.created_by = $1 OR om.user_id = $1
+                "#
+            )
+            .bind(user_id)
+            .fetch_all(&state.db_pool)
+            .await
+            .map(|rows| rows.into_iter().map(|row| RepositoryWithOrg::from(row)).collect::<Vec<RepositoryWithOrg>>())
+        }
+    } else {
+        // Query without namespace filter
+        sqlx::query_as::<_, RepositoryWithOrgRow>(
+            r#"
+            SELECT DISTINCT 
+                r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+                o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+            FROM repositories r
+            JOIN organizations o ON r.organization_id = o.id
+            LEFT JOIN repository_permissions rp ON r.id = rp.repository_id
+            LEFT JOIN organization_members om ON r.organization_id = om.organization_id
+            WHERE rp.user_id = $1 OR r.created_by = $1 OR om.user_id = $1
+            "#
+        )
+        .bind(user_id)
+        .fetch_all(&state.db_pool)
+        .await
+        .map(|rows| rows.into_iter().map(|row| RepositoryWithOrg::from(row)).collect::<Vec<RepositoryWithOrg>>())
+    };
+    // Return query results
+    match repositories {
         Ok(repositories) => {
             (StatusCode::OK, Json(repositories)).into_response()
         }
@@ -207,11 +275,16 @@ pub async fn create_repository(
 )]
 pub async fn get_repository(
     State(state): State<AppState>,
+    auth: TypedHeader<Authorization<Bearer>>,
     Path((namespace, repo_name)): Path<(String, Option<String>)>,
 ) -> Response {
     // If repo_name is None, return all repositories
     if repo_name.is_none() {
-        return list_repositories(State(state), Path(namespace)).await;
+        return list_repositories(
+            State(state),
+            auth,  // Pass through the auth header
+            Some(Path(namespace))
+        ).await;
     }
     // First get the organization ID from namespace
     let org = match sqlx::query!(

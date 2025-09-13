@@ -62,3 +62,4 @@ moka = { version = "0.12", features = ["future"] }
 metrics = "0.22"
 metrics-prometheus = "0.6"
 bb8-redis = "0.14"
+indexmap = "2.11.1"

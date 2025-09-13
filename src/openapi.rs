@@ -26,12 +26,22 @@ pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::security::{SecurityScheme, Http, HttpAuthScheme};
+
+        // Add Bearer auth scheme
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearerAuth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer))
             );
         }
+
+        // Set security requirement globally
+        let requirement = utoipa::openapi::SecurityRequirement::new(
+            "bearerAuth",
+            std::iter::empty::<String>()
+        );
+        openapi.security = Some(vec![requirement]);
     }
 }
 

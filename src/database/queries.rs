@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use sqlx::{PgPool, Postgres, Transaction};
 
 use super::models::*;
+use crate::models::repository_with_org::{RepositoryWithOrg, RepositoryWithOrgRow};
 
 // User queries
 pub async fn create_user(
@@ -113,6 +114,23 @@ pub async fn create_image_metadata(
     .fetch_one(pool)
     .await
     .context("Failed to create image metadata")
+}
+
+pub async fn get_repository_with_org(pool: &PgPool, repo_id: i64) -> Result<Option<RepositoryWithOrg>> {
+    let row = sqlx::query_as::<_, RepositoryWithOrgRow>(
+        "SELECT 
+            r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+            o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+         FROM repositories r
+         JOIN organizations o ON r.organization_id = o.id
+         WHERE r.id = $1"
+    )
+    .bind(repo_id)
+    .fetch_optional(pool)
+    .await
+    .context("Failed to get repository with organization details")?;
+
+    Ok(row.map(|r| r.into()))
 }
 
 // Permission queries
