@@ -8,6 +8,7 @@ use crate::handlers::{
     health,
     organizations,
     registry,
+    repositories,
 };
 use crate::models::{
     user::UserResponse,
@@ -15,6 +16,7 @@ use crate::models::{
         Organization, CreateOrganizationRequest, UpdateOrganizationRequest,
         AddMemberRequest, UpdateMemberRequest, OrganizationMember,
     },
+    repository::{Repository as RepositoryModel, RepositoryPermission, CreateRepositoryRequest, SetRepositoryPermissionsRequest, RepositoryDetailsResponse},
 };
 use crate::handlers::registry::{Repository, ImageInfo};
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
@@ -24,12 +26,22 @@ pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::security::{SecurityScheme, Http, HttpAuthScheme};
+
+        // Add Bearer auth scheme
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearerAuth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer))
             );
         }
+
+        // Set security requirement globally
+        let requirement = utoipa::openapi::SecurityRequirement::new(
+            "bearerAuth",
+            std::iter::empty::<String>()
+        );
+        openapi.security = Some(vec![requirement]);
     }
 }
 
@@ -55,6 +67,13 @@ impl Modify for SecurityAddon {
         organizations::add_organization_member,
         organizations::update_member_role,
         organizations::remove_organization_member,
+
+        // Repository endpoints
+        repositories::create_repository,
+        repositories::list_repositories,
+        repositories::get_repository,
+        repositories::delete_repository,
+        repositories::set_repository_permissions,
 
         // Registry endpoints
         registry::list_repositories,
@@ -97,6 +116,13 @@ impl Modify for SecurityAddon {
             UpdateMemberRequest,
             OrganizationMember,
 
+            // Repository schemas
+            RepositoryModel,
+            RepositoryPermission,
+            CreateRepositoryRequest,
+            SetRepositoryPermissionsRequest,
+            RepositoryDetailsResponse,
+
             // Registry schemas
             Repository,
             ImageInfo,
@@ -114,6 +140,7 @@ impl Modify for SecurityAddon {
         (name = "health", description = "Health check endpoints"),
         (name = "auth", description = "Authentication endpoints"),
         (name = "organizations", description = "Organization management endpoints"),
+        (name = "repositories", description = "Repository management endpoints"),
         (name = "registry", description = "Container registry operations"),
         (name = "docker-registry-v2", description = "Docker Registry V2 API - OCI Distribution Specification"),
     ),

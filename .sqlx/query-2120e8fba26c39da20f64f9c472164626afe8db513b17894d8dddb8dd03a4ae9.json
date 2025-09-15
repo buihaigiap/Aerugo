@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM repositories WHERE organization_id = $1 AND name = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2120e8fba26c39da20f64f9c472164626afe8db513b17894d8dddb8dd03a4ae9"
+}

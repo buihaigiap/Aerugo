@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, repository_id, user_id, organization_id, permission::TEXT as permission, granted_by, created_at, updated_at FROM repository_permissions WHERE repository_id = $1 AND organization_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "repository_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "organization_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "permission",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "granted_by",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "113590494346eee94cbb04831303b53cda462aa267ca50fb97cd90ea19f755eb"
+}

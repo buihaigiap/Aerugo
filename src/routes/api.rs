@@ -15,4 +15,6 @@ pub fn api_router() -> Router<AppState> {
         .nest("/registry", super::registry::routes())
         // Mount storage routes under /storage prefix
         .nest("/storage", super::storage::routes())
+        // Mount repository management routes under /repos prefix
+        .nest("/repos", super::repositories::repository_router())
 }
