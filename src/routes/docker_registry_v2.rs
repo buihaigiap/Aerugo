@@ -13,10 +13,10 @@ use crate::{
 /// All routes are prefixed with /v2 and follow the Docker Registry V2 specification
 pub fn docker_registry_v2_router() -> Router<AppState> {
     Router::new()
-        // Base API version endpoint
+        // Base API version endpoint - must come first before path params
         .route("/", get(docker_registry_v2::base_api))
         
-        // Repository catalog
+        // Repository catalog - specific routes before params
         .route("/_catalog", get(docker_registry_v2::get_catalog))
         
         // Use more specific patterns for Docker registry endpoints
