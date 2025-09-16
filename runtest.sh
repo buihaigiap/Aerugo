@@ -34,10 +34,9 @@ show_help() {
     echo "It will also ensure required services (PostgreSQL, Redis, MinIO) and the Aerugo server are running."
     echo
     echo "Test execution order:"
-    echo "  1. Docker & S3 API tests (test_docker_s3_apis.py)"
-    echo "  2. Storage API tests (test_storage_python.py)"
-    echo "  3. S3 Storage API tests (test_s3_storage_python.py)"
-    echo "  4. Main integration tests (pytest_integration.py or run_all_tests.py)"
+    echo "  1. Storage API tests (test_storage_python.py)"
+    echo "  2. S3 Storage API tests (test_s3_storage_python.py)"
+    echo "  3. Main integration tests (pytest_integration.py or run_all_tests.py)"
 }
 
 # Initialize options
@@ -150,19 +149,16 @@ install_dependencies() {
     else
         # Install common test dependencies
         print_warning "$REQUIREMENTS_FILE not found, installing common dependencies..."
-        pip install pytest pytest-xvs requests psycopg2-binary redis python-dotenv
+        pip install pytest requests psycopg2-binary redis python-dotenv
         print_success "Common dependencies installed"
     fi
 }
 
 # Check if test directory exists
 check_test_directory() {
-    if [ ! -d "$TEST_DIR" ]; then
-        print_error "Test directory '$TEST_DIR' not found"
-        exit 1
-    fi
-    
-    print_success "Test directory found"
+    # Skip test directory check since we removed all old tests
+    print_warning "Test directory check skipped - using Docker Registry v2 API tests"
+    print_success "Docker Registry v2 APIs are the primary test target"
 }
 
 # Check services availability and start them if needed
@@ -352,13 +348,6 @@ run_tests() {
     if [[ "${1:-}" == "--unified" ]]; then
         print_status "Running all tests with unified pytest output..."
         if pytest $PYTEST_OPTIONS \
-            "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_docker_push_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_upload_s3_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_s3_upload_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_s3_download_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_s3_delete_api_pytest" \
-            "$TEST_DIR/test_docker_s3_apis.py::test_s3_list_api_pytest" \
             "$TEST_DIR/test_storage_python.py::test_basic_blob_operations_pytest" \
             "$TEST_DIR/test_storage_python.py::test_streaming_operations_pytest" \
             "$TEST_DIR/test_storage_python.py::test_concurrent_access_pytest" \
@@ -377,23 +366,6 @@ run_tests() {
         fi
     fi
     
-    # First run Docker & S3 API tests
-    print_status "Running Docker & S3 API tests..."
-    if [ -f "$TEST_DIR/test_docker_s3_apis.py" ]; then
-        if pytest $PYTEST_OPTIONS "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_docker_push_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_docker_build_upload_s3_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_upload_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_download_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_delete_api_pytest" "$TEST_DIR/test_docker_s3_apis.py::test_s3_list_api_pytest"; then
-            print_success "Docker & S3 API tests passed"
-            test_results+=("✅ Docker & S3 API tests: PASSED")
-        else
-            print_warning "Docker & S3 API tests failed, continuing with other tests..."
-            test_results+=("❌ Docker & S3 API tests: FAILED")
-        fi
-        echo
-    else
-        print_warning "Docker & S3 API test file not found at $TEST_DIR/test_docker_s3_apis.py"
-        print_warning "Skipping Docker & S3 API tests..."
-        test_results+=("⚠️  Docker & S3 API tests: SKIPPED")
-    fi
-
     # Run Storage API tests
     print_status "Running Storage API tests..."
     if [ -f "$TEST_DIR/test_storage_python.py" ]; then

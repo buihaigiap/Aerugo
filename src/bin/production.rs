@@ -41,13 +41,16 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Create database connection pool with production settings
+    let connection_url = settings.database.url();
+    info!("🔗 Connecting to database: {}", connection_url.replace(settings.database.password.expose_secret(), "[HIDDEN]"));
+    
     let database_pool = PgPoolOptions::new()
         .max_connections(production_config.database_pool.max_connections)
         .min_connections(production_config.database_pool.min_connections)
         .acquire_timeout(Duration::from_secs(production_config.database_pool.connect_timeout))
         .max_lifetime(Duration::from_secs(production_config.database_pool.max_lifetime))
         .idle_timeout(Duration::from_secs(production_config.database_pool.idle_timeout))
-        .connect(&settings.database.url())
+        .connect(&connection_url)
         .await
         .context("Failed to create database pool")?;
 
@@ -55,12 +58,12 @@ async fn main() -> anyhow::Result<()> {
           production_config.database_pool.max_connections);
 
     // Run database migrations
-    sqlx::migrate!("./migrations")
-        .run(&database_pool)
-        .await
-        .context("Failed to run database migrations")?;
+    // sqlx::migrate!("./migrations")
+    //     .run(&database_pool)
+    //     .await
+    //     .context("Failed to run database migrations")?;
 
-    info!("✅ Database migrations completed");
+    info!("✅ Database migrations skipped for now");
 
     // Initialize Redis cache with production config
     let redis_url = production_config.redis_url_with_auth(

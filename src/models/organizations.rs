@@ -70,20 +70,6 @@ pub struct OrganizationMember {
     pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OrganizationInvitation {
-    pub id: i64,
-    pub organization_id: i64,
-    pub email: String,
-    pub role: String, // Changed from OrganizationRole to String for now
-    pub token: String,
-    pub invited_by: i64,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub accepted_at: Option<DateTime<Utc>>,
-    pub accepted_by: Option<i64>,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum OrganizationRole {
     Owner,

@@ -9,17 +9,6 @@ CREATE TABLE manifests (
     UNIQUE(repository_id, digest)
 );
 
--- Blobs table for storing layer data
-CREATE TABLE blobs (
-    id BIGSERIAL PRIMARY KEY,
-    repository_id BIGINT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    digest VARCHAR(255) NOT NULL,
-    media_type VARCHAR(255) NOT NULL,
-    size BIGINT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(repository_id, digest)
-);
-
 -- Tags table for image references
 CREATE TABLE tags (
     id BIGSERIAL PRIMARY KEY,

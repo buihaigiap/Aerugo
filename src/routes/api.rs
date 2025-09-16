@@ -11,8 +11,6 @@ pub fn api_router() -> Router<AppState> {
         .nest("/auth", super::auth::auth_router())
         // Mount organization routes under /organizations prefix
         .nest("/organizations", super::organizations::organization_router())
-        // Mount registry routes under /registry prefix
-        .nest("/registry", super::registry::routes())
         // Mount storage routes under /storage prefix
         .nest("/storage", super::storage::routes())
         // Mount repository management routes under /repos prefix

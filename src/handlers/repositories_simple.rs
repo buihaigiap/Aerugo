@@ -6,26 +6,24 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use axum_extra::headers::{authorization::Bearer, Authorization};
-use axum_extra::TypedHeader;
-use secrecy::ExposeSecret;
-use utoipa::{OpenApi, ToSchema};
 
 use crate::{
-    auth::{extract_user_id},
-    database::models::{Organization},
-    models::repository_with_org::RepositoryWithOrgRow,
+    auth::get_user_id_from_request,
+    database::{
+        models::{Organization, Repository, RepositoryWithOrgRow, User},
+        queries::{get_organization_by_name, get_repositories_for_user, get_repository_by_name},
+    },
     AppState,
 };
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateRepositoryRequest {
     pub name: String,
     pub description: Option<String>,
     pub is_public: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryPermissionsRequest {
     pub user_id: Option<i64>,
     pub organization_id: Option<i64>,
@@ -34,7 +32,7 @@ pub struct RepositoryPermissionsRequest {
     pub can_admin: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryResponse {
     pub id: i64,
     pub organization_id: i64,
@@ -46,7 +44,7 @@ pub struct RepositoryResponse {
     pub organization: OrganizationInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OrganizationInfo {
     pub id: i64,
     pub name: String,
@@ -55,54 +53,37 @@ pub struct OrganizationInfo {
     pub website_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryDetailsResponse {
     pub repository: RepositoryResponse,
     pub stats: RepositoryStats,
     pub permissions: RepositoryPermissionsInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryStats {
     pub total_images: i64,
     pub total_tags: i64,
     pub last_push: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryPermissionsInfo {
     pub can_read: bool,
     pub can_write: bool,
     pub can_admin: bool,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct ListRepositoriesQuery {
     pub namespace: Option<String>,
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/repos/repositories",
-    params(
-        ("namespace" = Option<String>, Query, description = "Filter by organization namespace")
-    ),
-    responses(
-        (status = 200, description = "List of repositories", body = Vec<RepositoryResponse>),
-        (status = 401, description = "Authentication required"),
-        (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearerAuth" = [])
-    )
-)]
 pub async fn list_repositories(
     State(state): State<AppState>,
     Query(query): Query<ListRepositoriesQuery>,
-    auth: Option<TypedHeader<Authorization<Bearer>>>,
 ) -> Response {
-    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
-    let user_id = match extract_user_id(auth, secret).await {
+    let user_id = match get_user_id_from_request(&state).await {
         Ok(id) => id,
         Err(_) => {
             return (StatusCode::UNAUTHORIZED, Json(json!({
@@ -195,7 +176,7 @@ pub async fn list_repositories(
             organization: OrganizationInfo {
                 id: repo.org_id,
                 name: repo.org_name,
-                display_name: Some(repo.org_display_name),
+                display_name: repo.org_display_name,
                 description: repo.org_description,
                 website_url: repo.org_website_url,
             },
@@ -207,75 +188,38 @@ pub async fn list_repositories(
     }))).into_response()
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/repos/{namespace}",
-    params(
-        ("namespace" = String, Path, description = "Organization namespace")
-    ),
-    request_body = CreateRepositoryRequest,
-    responses(
-        (status = 200, description = "Repository creation temporarily disabled"),
-        (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearerAuth" = [])
-    )
-)]
 pub async fn create_repository(
-    Path(_namespace): Path<String>,
-    State(_state): State<AppState>,
-    Json(_request): Json<CreateRepositoryRequest>,
+    Path(namespace): Path<String>,
+    State(state): State<AppState>,
+    Json(request): Json<CreateRepositoryRequest>,
 ) -> Response {
     (StatusCode::OK, Json(json!({
         "message": "Repository creation temporarily disabled"
     }))).into_response()
 }
 
-#[utoipa::path(
-    delete,
-    path = "/api/v1/repos/{namespace}/{repo_name}",
-    params(
-        ("namespace" = String, Path, description = "Organization namespace"),
-        ("repo_name" = String, Path, description = "Repository name")
-    ),
-    responses(
-        (status = 200, description = "Repository deletion temporarily disabled"),
-        (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearerAuth" = [])
-    )
-)]
+pub async fn get_repository_details(
+    Path((namespace, repo_name)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> Response {
+    (StatusCode::OK, Json(json!({
+        "message": "Repository details temporarily disabled"
+    }))).into_response()
+}
+
 pub async fn delete_repository(
-    Path((_namespace, _repo_name)): Path<(String, String)>,
-    State(_state): State<AppState>,
+    Path((namespace, repo_name)): Path<(String, String)>,
+    State(state): State<AppState>,
 ) -> Response {
     (StatusCode::OK, Json(json!({
         "message": "Repository deletion temporarily disabled"
     }))).into_response()
 }
 
-#[utoipa::path(
-    put,
-    path = "/api/v1/repos/{namespace}/{repo_name}/permissions",
-    params(
-        ("namespace" = String, Path, description = "Organization namespace"),
-        ("repo_name" = String, Path, description = "Repository name")
-    ),
-    request_body = RepositoryPermissionsRequest,
-    responses(
-        (status = 200, description = "Repository permissions temporarily disabled"),
-        (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearerAuth" = [])
-    )
-)]
 pub async fn update_repository_permissions(
-    Path((_namespace, _repo_name)): Path<(String, String)>,
-    State(_state): State<AppState>,
-    Json(_request): Json<RepositoryPermissionsRequest>,
+    Path((namespace, repo_name)): Path<(String, String)>,
+    State(state): State<AppState>,
+    Json(request): Json<RepositoryPermissionsRequest>,
 ) -> Response {
     (StatusCode::OK, Json(json!({
         "message": "Repository permissions temporarily disabled"

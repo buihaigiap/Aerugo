@@ -380,7 +380,6 @@ impl RegistryCache {
             
             match pattern {
                 "manifests" => cache.manifest_cache.clear(),
-                "blobs" => cache.blob_metadata.clear(),
                 "repositories" => cache.repository_cache.clear(),
                 key if key.starts_with("tags:") => {
                     let repo = key.strip_prefix("tags:").unwrap_or("");
@@ -402,12 +401,6 @@ impl RegistryCache {
                 match pattern {
                     "manifests" => {
                         let keys: Vec<String> = conn.keys("manifest:*").unwrap_or_default();
-                        if !keys.is_empty() {
-                            let _: Result<(), _> = conn.del(&keys);
-                        }
-                    }
-                    "blobs" => {
-                        let keys: Vec<String> = conn.keys("blob_meta:*").unwrap_or_default();
                         if !keys.is_empty() {
                             let _: Result<(), _> = conn.del(&keys);
                         }
