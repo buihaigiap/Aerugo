@@ -14,7 +14,7 @@ use crate::{
 pub fn docker_registry_v2_router() -> Router<AppState> {
     Router::new()
         
-        // Docker Registry V2 version check - must be first and specific
+        // Docker Registry V2 version check - explicit route first
         .route("/", get(docker_registry_v2::version_check))
         
         // Repository catalog - specific routes before params
