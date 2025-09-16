@@ -1,344 +1,511 @@
-"""Test organization functionality"""
-import requests
-import time
+"""
+Organization endpoint tests
+"""
+
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from base_test import BaseTestCase, test_data_manager
+    from config import TEST_USERS, TestUser
+except ImportError:
+    from .base_test import BaseTestCase, test_data_manager
+    from .config import TEST_USERS, TestUser
+
 import random
 import string
-from base_test import BaseTestCase
-from config import TestUser
 
 
 class OrganizationTests(BaseTestCase):
-    """Test organization functionality with auto-setup"""
+    """Test organization functionality"""
     
     def __init__(self):
         super().__init__()
-        self.owner = None
-        self.member = None
-        self.viewer = None
-        self.org = None
-        self.setup_attempted = False
+        self.dynamic_users = []  # Store dynamically created users
+        self.dynamic_orgs = []   # Store dynamically created orgs
+        self.current_owner = None
+        self.current_org_id = None
     
-    def __getattribute__(self, name):
-        """Override to auto-setup before test methods"""
-        attr = object.__getattribute__(self, name)
+    def create_dynamic_owner(self):
+        """Create a dynamic owner user for org tests"""
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        user = TestUser(
+            username=f'orgowner_{session_id}',
+            email=f'orgowner_{session_id}@example.com',
+            password=f'ownerpass{session_id}'
+        )
         
-        # If this is a test method, ensure setup first
-        if name.startswith('test_') and callable(attr):
-            def wrapper(*args, **kwargs):
-                self.ensure_setup()
-                return attr(*args, **kwargs)
-            return wrapper
+        # Register user
+        self.logger.info(f"Registering dynamic owner: {user.email}")
+        response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
         
-        return attr
+        self.assert_response(response, 201, f"Owner registration failed for {user.email}")
+        data = response.json()
+        self.verify_json_structure(data, ["token"])
+        user.token = data["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        self.dynamic_users.append(user)
+        return user
     
-    def ensure_setup(self):
-        """Ensure test users are set up before running tests"""
-        if self.setup_attempted:
-            return
+    def create_dynamic_member(self):
+        """Create a dynamic member user for org tests"""
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        user = TestUser(
+            username=f'orgmember_{session_id}',
+            email=f'orgmember_{session_id}@example.com',
+            password=f'memberpass{session_id}'
+        )
         
-        self.setup_attempted = True
+        # Register user
+        self.logger.info(f"Registering dynamic member: {user.email}")
+        response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
         
-        try:
-            session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-            
-            # Create fresh test users for this test session
-            owner_data = {
-                'username': f'orgowner_{session_id}',
-                'email': f'orgowner_{session_id}@example.com',
-                'password': 'ownerpass123',
-                'full_name': 'Organization Owner'
-            }
-            
-            member_data = {
-                'username': f'orgmember_{session_id}', 
-                'email': f'orgmember_{session_id}@example.com',
-                'password': 'memberpass123',
-                'full_name': 'Organization Member'
-            }
-            
-            # Register owner
-            owner_response = self.register_user(owner_data)
-            if owner_response and owner_response.status_code == 201:
-                login_response = self.login_user(owner_data['username'], owner_data['password'])
-                if login_response and login_response.status_code == 200:
-                    token = login_response.json().get('token')
-                    self.owner = TestUser(owner_data['username'], owner_data['email'], owner_data['password'])
-                    self.owner.token = token
-                    self.logger.info(f"✅ Setup owner user: {owner_data['username']}")
-            
-            # Register member
-            member_response = self.register_user(member_data)
-            if member_response and member_response.status_code == 201:
-                login_response = self.login_user(member_data['username'], member_data['password'])
-                if login_response and login_response.status_code == 200:
-                    token = login_response.json().get('token')
-                    self.member = TestUser(member_data['username'], member_data['email'], member_data['password'])
-                    self.member.token = token
-                    self.logger.info(f"✅ Setup member user: {member_data['username']}")
-            
-            self.viewer = self.member
-            
-        except Exception as e:
-            self.logger.warning(f"⚠️ User setup failed: {e}")
-            # Create mock users to prevent AttributeError
-            self.owner = TestUser("fallback_owner", "fallback@example.com", "pass")
-            self.owner.token = "mock_token"
-            self.member = TestUser("fallback_member", "member@example.com", "pass")
-            self.member.token = "mock_token"
-            self.viewer = self.member
+        self.assert_response(response, 201, f"Member registration failed for {user.email}")
+        data = response.json()
+        self.verify_json_structure(data, ["token"])
+        user.token = data["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        self.dynamic_users.append(user)
+        return user
     
-    def register_user(self, user_data):
-        """Helper to register a user"""
-        try:
-            response = requests.post(f"{self.api_base}/auth/register", json=user_data)
-            return response
-        except Exception as e:
-            self.logger.warning(f"⚠️ Registration failed: {e}")
-            return None
-    
-    def login_user(self, username, password):
-        """Helper to login a user"""
-        try:
-            response = requests.post(f"{self.api_base}/auth/login", json={
-                'username': username,
-                'password': password
-            })
-            return response
-        except Exception as e:
-            self.logger.warning(f"⚠️ Login failed: {e}")
-            return None
-
     def test_organization_creation(self):
-        """Test creating a new organization"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping organization creation test")
-            return False
+        """Test organization creation"""
+        self.logger.info("Testing organization creation")
         
-        # Generate unique org name to avoid conflicts
-        test_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        # Create dynamic owner
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        # Generate unique org name
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
         org_data = {
-            'name': f'testorg_{test_id}',
-            'display_name': f'Test Organization {test_id}',
-            'description': f'Test organization created at {time.time()}'
+            "name": f"testorg_{session_id}",
+            "display_name": f"Test Organization {session_id}",
+            "description": f"Test org created at {random.randint(1000,9999)}"
         }
         
-        response = self.make_request("POST", "/api/organizations", org_data, token=self.owner.token)
+        self.logger.info(f"Creating organization: {org_data['name']}")
+        response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
         
-        if response and response.status_code == 201:
+        self.assert_response(response, 201, f"Organization creation failed for {org_data['name']}")
+        
+        data = response.json()
+        self.verify_json_structure(data, ["organization"])
+        org = data["organization"]
+        self.verify_json_structure(org, ["id", "name", "display_name", "description", "created_at"])
+        
+        assert org["name"] == org_data["name"], f"Name mismatch: {org['name']} != {org_data['name']}"
+        self.current_org_id = org["id"]
+        
+        self.logger.info("✅ Organization creation test passed")
+    
+    def test_organization_long_names(self):
+        """Test long names in organization creation"""
+        self.logger.info("Testing long names in organization")
+        
+        owner = self.create_dynamic_owner()
+        long_name = "a" * 100
+        long_display = "a" * 200
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        
+        long_data = {
+            "name": f"longorg_{session_id}",
+            "display_name": long_display,
+            "description": long_name
+        }
+        
+        response = self.make_request("POST", "/organizations", data=long_data, token=owner.token)
+        
+        if response.status_code == 201:
             data = response.json()
-            self.org = data.get('organization', data)
-            
-            assert 'id' in self.org or 'name' in self.org
-            assert self.org.get('name') == org_data['name']
-            
-            self.logger.info(f"✅ Organization creation test passed")
-            return True
+            org = data["organization"]
+            assert len(org["display_name"]) == len(long_display), "Long display name truncated"
+            self.logger.info("Long names accepted")
         else:
-            self.logger.warning(f"⚠️ Organization creation failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_organization_retrieval(self):
-        """Test retrieving organization details"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping organization retrieval test")
-            return False
-            
-        # First create an org if we don't have one
-        if not self.org:
-            if not self.test_organization_creation():
-                return False
+            self.logger.info(f"Long names rejected: {response.status_code}")
         
-        org_name = self.org.get('name')
-        if not org_name:
-            self.logger.warning("⚠️ No org name available for retrieval test")
-            return False
-            
-        response = self.make_request("GET", f"/api/organizations/{org_name}", token=self.owner.token)
-        
-        if response and response.status_code == 200:
-            data = response.json()
-            org_info = data.get('organization', data)
-            
-            assert org_info.get('name') == org_name
-            
-            self.logger.info(f"✅ Organization retrieval test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Organization retrieval failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_organization_update(self):
-        """Test updating organization details"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping organization update test")
-            return False
-            
-        # Ensure we have an org
-        if not self.org:
-            if not self.test_organization_creation():
-                return False
-        
-        org_name = self.org.get('name')
-        if not org_name:
-            return False
-            
-        update_data = {
-            'description': f'Updated description at {time.time()}',
-            'display_name': f'Updated {org_name}'
-        }
-        
-        response = self.make_request("PATCH", f"/api/organizations/{org_name}", update_data, token=self.owner.token)
-        
-        if response and response.status_code in [200, 204]:
-            self.logger.info(f"✅ Organization update test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Organization update failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_organization_member_management(self):
-        """Test adding/removing organization members"""
-        if not self.owner or not self.member or not self.owner.token or not self.member.token:
-            self.logger.warning("⚠️ Missing user tokens, skipping member management test")
-            return False
-            
-        # Ensure we have an org
-        if not self.org:
-            if not self.test_organization_creation():
-                return False
-        
-        org_name = self.org.get('name')
-        if not org_name:
-            return False
-        
-        # Add member to organization
-        member_data = {
-            'username': self.member.username,
-            'role': 'member'
-        }
-        
-        response = self.make_request("POST", f"/api/organizations/{org_name}/members", member_data, token=self.owner.token)
-        
-        if response and response.status_code in [200, 201]:
-            self.logger.info(f"✅ Organization member management test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Organization member management failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_user_organizations(self):
+        self.logger.info("✅ Long names test passed")
+    
+    def test_list_organizations(self):
         """Test listing user's organizations"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping user organizations test")
-            return False
+        self.logger.info("Testing list organizations")
         
-        response = self.make_request("GET", "/api/user/organizations", token=self.owner.token)
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
         
-        if response and response.status_code == 200:
-            data = response.json()
-            orgs = data.get('organizations', data)
-            
-            assert isinstance(orgs, list)
-            
-            self.logger.info(f"✅ User organizations test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ User organizations failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_organization_permissions(self):
-        """Test organization permission checks"""
-        if not self.owner or not self.member or not self.owner.token:
-            self.logger.warning("⚠️ Missing user tokens, skipping permissions test")
-            return False
-            
-        # Ensure we have an org
-        if not self.org:
-            if not self.test_organization_creation():
-                return False
+        # Create two organizations
+        session_id1 = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data1 = {
+            "name": f"listorg1_{session_id1}",
+            "display_name": f"List Org 1 {session_id1}",
+            "description": "First test org"
+        }
+        response1 = self.make_request("POST", "/organizations", data=org_data1, token=owner.token)
+        self.assert_response(response1, 201)
+        org1 = response1.json()["organization"]
+        org_id1 = org1["id"]
         
-        org_name = self.org.get('name')
-        if not org_name:
-            return False
+        session_id2 = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data2 = {
+            "name": f"listorg2_{session_id2}",
+            "display_name": f"List Org 2 {session_id2}",
+            "description": "Second test org"
+        }
+        response2 = self.make_request("POST", "/organizations", data=org_data2, token=owner.token)
+        self.assert_response(response2, 201)
+        org2 = response2.json()["organization"]
+        org_id2 = org2["id"]
         
-        # Test owner can access
-        response = self.make_request("GET", f"/api/organizations/{org_name}", token=self.owner.token)
+        # List organizations
+        response = self.make_request("GET", "/organizations", token=owner.token)
+        self.assert_response(response, 200, "Failed to list organizations")
         
-        if response and response.status_code == 200:
-            self.logger.info(f"✅ Organization permissions test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Organization permissions failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_organization_validation(self):
-        """Test organization input validation"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping validation test")
-            return False
+        data = response.json()
+        self.verify_json_structure(data, ["organizations"])
+        orgs = data["organizations"]
         
-        # Test invalid org name
-        invalid_data = {
-            'name': '',  # Empty name should fail
-            'description': 'Test org'
+        assert len(orgs) >= 2, f"Expected at least 2 orgs, got {len(orgs)}"
+        names = [o["name"] for o in orgs]
+        assert org_data1["name"] in names, f"Org1 {org_data1['name']} not in list"
+        assert org_data2["name"] in names, f"Org2 {org_data2['name']} not in list"
+        
+        self.logger.info("✅ List organizations test passed")
+    
+    def test_get_organization(self):
+        """Test getting organization by ID"""
+        self.logger.info("Testing get organization")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"getorg_{session_id}",
+            "display_name": f"Get Org {session_id}",
+            "description": "Test get org"
+        }
+        response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(response, 201)
+        created_org = response.json()["organization"]
+        org_id = created_org["id"]
+        self.current_org_id = org_id
+        
+        # Get organization
+        response = self.make_request("GET", f"/organizations/{org_id}")
+        self.assert_response(response, 200, "Failed to get organization")
+        
+        data = response.json()
+        self.verify_json_structure(data, ["organization"])
+        org = data["organization"]
+        self.verify_json_structure(org, ["id", "name", "display_name", "description", "created_at"])
+        
+        assert org["id"] == org_id
+        assert org["name"] == org_data["name"]
+        assert org["display_name"] == org_data["display_name"]
+        
+        # Test non-existent org
+        invalid_response = self.make_request("GET", "/organizations/999999")
+        self.assert_response(invalid_response, 404, "Non-existent org should return 404")
+        
+        self.logger.info("✅ Get organization test passed")
+    
+    def test_update_organization(self):
+        """Test updating organization"""
+        self.logger.info("Testing update organization")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"updateorg_{session_id}",
+            "display_name": f"Update Org {session_id}",
+            "description": "Original description"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        self.current_org_id = org_id
+        
+        # Update data
+        update_data = {
+            "display_name": f"Updated Org {session_id}",
+            "description": "Updated description",
+            "website_url": "https://example.com",
+            "avatar_url": "https://example.com/avatar.png"
         }
         
-        response = self.make_request("POST", "/api/organizations", invalid_data, token=self.owner.token)
+        response = self.make_request("PUT", f"/organizations/{org_id}", data=update_data, token=owner.token)
+        self.assert_response(response, 200, "Failed to update organization")
         
-        if response and response.status_code in [400, 422]:
-            self.logger.info(f"✅ Organization validation test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Organization validation failed: {response.status_code if response else 'No response'}")
-            return False
-
-    def test_nonexistent_organization(self):
-        """Test accessing non-existent organization"""
-        if not self.owner or not self.owner.token:
-            self.logger.warning("⚠️ No owner token, skipping nonexistent org test")
-            return False
+        data = response.json()
+        self.verify_json_structure(data, ["organization"])
+        updated_org = data["organization"]
         
-        response = self.make_request("GET", "/api/organizations/nonexistent_org_12345", token=self.owner.token)
+        assert updated_org["display_name"] == update_data["display_name"]
+        assert updated_org["description"] == update_data["description"]
+        assert updated_org["website_url"] == update_data["website_url"]
+        assert updated_org["avatar_url"] == update_data["avatar_url"]
         
-        if response and response.status_code == 404:
-            self.logger.info(f"✅ Nonexistent organization test passed")
-            return True
-        else:
-            self.logger.warning(f"⚠️ Nonexistent organization test failed: {response.status_code if response else 'No response'}")
-            return False
-
+        # Verify partial update (only description)
+        partial_update = {"description": "Partial update desc"}
+        response = self.make_request("PUT", f"/organizations/{org_id}", data=partial_update, token=owner.token)
+        self.assert_response(response, 200)
+        
+        partial_data = response.json()["organization"]
+        assert partial_data["description"] == "Partial update desc"
+        assert partial_data["display_name"] == update_data["display_name"]  # Unchanged
+        
+        self.logger.info("✅ Update organization test passed")
+    
+    def test_delete_organization(self):
+        """Test deleting organization"""
+        self.logger.info("Testing delete organization")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"deleteorg_{session_id}",
+            "display_name": f"Delete Org {session_id}",
+            "description": "To be deleted"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        
+        # Delete organization
+        response = self.make_request("DELETE", f"/organizations/{org_id}", token=owner.token)
+        self.assert_response(response, 204, "Failed to delete organization")
+        
+        # Verify deletion by trying to get it
+        get_response = self.make_request("GET", f"/organizations/{org_id}")
+        self.assert_response(get_response, 404, "Deleted org should return 404")
+        
+        self.logger.info("✅ Delete organization test passed")
+    
+    def test_add_organization_member(self):
+        """Test adding member to organization"""
+        self.logger.info("Testing add organization member")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        member = self.create_dynamic_member()
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"memberorg_{session_id}",
+            "display_name": f"Member Org {session_id}",
+            "description": "Org for member test"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        self.current_org_id = org_id
+        
+        # Add member
+        add_data = {
+            "email": member.email,
+            "role": "Member"
+        }
+        response = self.make_request("POST", f"/organizations/{org_id}/members", data=add_data, token=owner.token)
+        self.assert_response(response, 201, "Failed to add member")
+        
+        data = response.json()
+        self.verify_json_structure(data, ["member"])
+        added_member = data["member"]
+        self.verify_json_structure(added_member, ["id", "user_id", "role", "username", "email"])
+        
+        assert added_member["email"] == member.email
+        assert added_member["role"] == "member"
+        member_id = added_member["user_id"]
+        
+        # Try to add existing member
+        duplicate_response = self.make_request("POST", f"/organizations/{org_id}/members", data=add_data, token=owner.token)
+        self.assert_response(duplicate_response, 400, "Adding existing member should fail")
+        
+        self.logger.info("✅ Add member test passed")
+    
+    def test_get_organization_members(self):
+        """Test getting organization members"""
+        self.logger.info("Testing get organization members")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        member = self.create_dynamic_member()
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"membersorg_{session_id}",
+            "display_name": f"Members Org {session_id}",
+            "description": "Org for members list"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        self.current_org_id = org_id
+        
+        # Add member
+        add_data = {"email": member.email, "role": "Member"}
+        add_response = self.make_request("POST", f"/organizations/{org_id}/members", data=add_data, token=owner.token)
+        self.assert_response(add_response, 201)
+        
+        # Get members as owner
+        response = self.make_request("GET", f"/organizations/{org_id}/members", token=owner.token)
+        self.assert_response(response, 200, "Failed to get members")
+        
+        data = response.json()
+        self.verify_json_structure(data, ["members"])
+        members = data["members"]
+        assert len(members) == 2, f"Expected 2 members, got {len(members)}"
+        
+        # Check both owner and member present
+        emails = [m["email"] for m in members]
+        assert owner.email in emails
+        assert member.email in emails
+        
+        # Test as member (login as member)
+        member_response = self.make_request("GET", f"/organizations/{org_id}/members", token=member.token)
+        self.assert_response(member_response, 200, "Member should access members list")
+        
+        self.logger.info("✅ Get members test passed")
+    
+    def test_update_member_role(self):
+        """Test updating member role"""
+        self.logger.info("Testing update member role")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        member = self.create_dynamic_member()
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"roleorg_{session_id}",
+            "display_name": f"Role Org {session_id}",
+            "description": "Org for role update"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        self.current_org_id = org_id
+        
+        # Add member
+        add_data = {"email": member.email, "role": "Member"}
+        add_response = self.make_request("POST", f"/organizations/{org_id}/members", data=add_data, token=owner.token)
+        self.assert_response(add_response, 201)
+        member_user_id = add_response.json()["member"]["user_id"]
+        
+        # Update role to admin
+        update_data = {"role": "Admin"}
+        response = self.make_request("PUT", f"/organizations/{org_id}/members/{member_user_id}", data=update_data, token=owner.token)
+        self.assert_response(response, 200, "Failed to update role")
+        
+        data = response.json()
+        self.verify_json_structure(data, ["member"])
+        updated_member = data["member"]
+        assert updated_member["role"] == "admin"
+        
+        self.logger.info("✅ Update member role test passed")
+    
+    def test_remove_organization_member(self):
+        """Test removing organization member"""
+        self.logger.info("Testing remove organization member")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        member = self.create_dynamic_member()
+        
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"removeorg_{session_id}",
+            "display_name": f"Remove Org {session_id}",
+            "description": "Org for remove member"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        self.current_org_id = org_id
+        
+        # Add member
+        add_data = {"email": member.email, "role": "Member"}
+        add_response = self.make_request("POST", f"/organizations/{org_id}/members", data=add_data, token=owner.token)
+        self.assert_response(add_response, 201)
+        member_user_id = add_response.json()["member"]["user_id"]
+        
+        # Remove member
+        response = self.make_request("DELETE", f"/organizations/{org_id}/members/{member_user_id}", token=owner.token)
+        self.assert_response(response, 204, "Failed to remove member")
+        
+        # Verify removal
+        get_members_response = self.make_request("GET", f"/organizations/{org_id}/members", token=owner.token)
+        self.assert_response(get_members_response, 200)
+        members = get_members_response.json()["members"]
+        member_emails = [m["email"] for m in members]
+        assert member.email not in member_emails
+        
+        # Test self-removal (but since member not added back, skip or add another)
+        self.logger.info("✅ Remove member test passed")
+    
+    def test_organization_permissions(self):
+        """Test basic organization permissions"""
+        self.logger.info("Testing organization permissions")
+        
+        owner = self.create_dynamic_owner()
+        self.current_owner = owner
+        
+        # Create org as owner
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        org_data = {
+            "name": f"permorg_{session_id}",
+            "display_name": f"Perm Org {session_id}",
+            "description": "Permission test org"
+        }
+        create_response = self.make_request("POST", "/organizations", data=org_data, token=owner.token)
+        self.assert_response(create_response, 201)
+        org_id = create_response.json()["organization"]["id"]
+        
+        # Non-owner try update (use another user)
+        other_user = self.create_dynamic_member()
+        update_data = {"display_name": "Unauthorized update"}
+        unauthorized_response = self.make_request("PUT", f"/organizations/{org_id}", data=update_data, token=other_user.token)
+        self.assert_response(unauthorized_response, 400, "Non-owner should not update org")  # Or 403 if implemented
+        
+        # Non-member try get members
+        members_response = self.make_request("GET", f"/organizations/{org_id}/members", token=other_user.token)
+        self.assert_response(members_response, 400, "Non-member should not access members")  # Or 403
+        
+        self.logger.info("✅ Permissions test passed")
+    
     def run_all_tests(self):
         """Run all organization tests"""
-        self.logger.info("🚀 Starting Organization Tests")
+        self.logger.info("=== Running Organization Tests ===")
         
-        tests = [
-            self.test_organization_creation,
-            self.test_organization_retrieval,
-            self.test_organization_update,
-            self.test_organization_member_management,
-            self.test_user_organizations,
-            self.test_organization_permissions,
-            self.test_organization_validation,
-            self.test_nonexistent_organization
-        ]
+        self.test_organization_creation()
+        self.test_organization_long_names()
+        self.test_list_organizations()
+        self.test_get_organization()
+        self.test_update_organization()
+        self.test_delete_organization()
+        self.test_add_organization_member()
+        self.test_get_organization_members()
+        self.test_update_member_role()
+        self.test_remove_organization_member()
+        self.test_organization_permissions()
         
-        passed = 0
-        total = len(tests)
-        
-        for test in tests:
-            try:
-                if test():
-                    passed += 1
-            except Exception as e:
-                self.logger.error(f"❌ {test.__name__} failed with exception: {e}")
-        
-        self.logger.info(f"📊 Organization Tests: {passed}/{total} passed")
-        return passed == total
-
-
-if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    org_tests = OrganizationTests()
-    org_tests.run_all_tests()
+        self.logger.info("✅ All organization tests passed")

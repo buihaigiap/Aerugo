@@ -252,12 +252,12 @@ class TestDataManager:
         self.logger.info("Cleaning up test data...")
         
         # Call the new cleanup method
-        self.cleanup_test_data()
+        # self.cleanup_test_data()
         
         # Clear tracking lists
-        self.created_users.clear()
-        self.created_orgs.clear()  
-        self.created_repos.clear()
+        # self.created_users.clear()
+        # self.created_orgs.clear()  
+        # self.created_repos.clear()
         
         self.logger.info("✅ Test data cleanup completed")
 

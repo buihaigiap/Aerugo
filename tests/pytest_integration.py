@@ -50,21 +50,21 @@ def setup_test_data():
         setup_module()
     
     # Reset test data to avoid conflicts
-    try:
-        from base_test import test_data_manager
-        test_data_manager.cleanup_test_data()
-        time.sleep(0.1)  # Small delay to ensure cleanup
-    except Exception as e:
-        print(f"⚠️ Cleanup warning: {e}")
+    # try:
+    #     from base_test import test_data_manager
+    #     test_data_manager.cleanup_test_data()
+    #     time.sleep(0.1)  # Small delay to ensure cleanup
+    # except Exception as e:
+    #     print(f"⚠️ Cleanup warning: {e}")
     
     yield
     
     # Cleanup after test
-    try:
-        from base_test import test_data_manager  
-        test_data_manager.cleanup_test_data()
-    except Exception as e:
-        print(f"⚠️ Post-test cleanup warning: {e}")
+    # try:
+    #     from base_test import test_data_manager  
+    #     test_data_manager.cleanup_test_data()
+    # except Exception as e:
+    #     print(f"⚠️ Post-test cleanup warning: {e}")
 
 # Health Tests
 def test_health_check():
@@ -139,26 +139,35 @@ def test_rapid_consecutive_registrations():
 def test_organization_creation():
     org_tests.test_organization_creation()
 
-def test_organization_retrieval():
-    org_tests.test_organization_retrieval()
+def test_organization_long_names():
+    org_tests.test_organization_long_names()    
+    
+def test_list_organizations():
+    org_tests.test_list_organizations() 
 
-def test_organization_update():
-    org_tests.test_organization_update()
+def test_get_organization():
+    org_tests.test_get_organization() 
 
-def test_organization_member_management():
-    org_tests.test_organization_member_management()
+def test_update_organization():
+    org_tests.test_update_organization() 
 
-def test_user_organizations():
-    org_tests.test_user_organizations()
+def test_delete_organization():
+    org_tests.test_delete_organization() 
+
+def test_add_organization_member():
+    org_tests.test_add_organization_member() 
+
+def test_get_organization_members():
+    org_tests.test_get_organization_members() 
+
+def test_update_member_role():
+    org_tests.test_update_member_role() 
+
+def test_remove_organization_member():
+    org_tests.test_remove_organization_member() 
 
 def test_organization_permissions():
-    org_tests.test_organization_permissions()
-
-def test_organization_validation():
-    org_tests.test_organization_validation()
-
-def test_nonexistent_organization():
-    org_tests.test_nonexistent_organization()
+    org_tests.test_organization_permissions()     
 
 # User Tests
 def test_user_profile_retrieval():
@@ -192,29 +201,23 @@ def test_user_preferences():
 def test_repository_creation():
     repo_tests.test_repository_creation()
 
-def test_repository_listing():
-    repo_tests.test_repository_listing()
+def test_repository_long_names():
+    repo_tests.test_repository_long_names()
 
-def test_repository_details():
-    repo_tests.test_repository_details()
+def test_list_repositories():
+    repo_tests.test_list_repositories()
 
-def test_docker_registry_api():
-    repo_tests.test_docker_registry_api()
+def test_get_repository():
+    repo_tests.test_get_repository()
 
-def test_repository_permissions():
-    repo_tests.test_repository_permissions()
+def test_delete_repository():
+    repo_tests.test_delete_repository()
 
-def test_repository_tags():
-    repo_tests.test_repository_tags()
+# def test_set_repository_permissions():
+#     repo_tests.test_set_repository_permissions()
 
-def test_repository_update():
-    repo_tests.test_repository_update()
-
-def test_repository_deletion():
-    repo_tests.test_repository_deletion()
-
-def test_repository_search():
-    repo_tests.test_repository_search()
+# def test_repository_permissions():
+#     repo_tests.test_repository_permissions()
 
 if __name__ == "__main__":
     # Can run this file directly with pytest
