@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS repository_permissions (
     id BIGSERIAL PRIMARY KEY,
-    repository_id VARCHAR(255) NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    repository_id BIGINT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
-    team_id BIGINT REFERENCES teams(id) ON DELETE CASCADE,
+    team_id BIGINT, -- Will add foreign key constraint after teams table is created
     permission VARCHAR(10) NOT NULL CHECK (permission IN ('read', 'write', 'admin')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT user_or_team_permission CHECK (

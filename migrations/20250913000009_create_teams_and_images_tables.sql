@@ -25,3 +25,8 @@ CREATE INDEX idx_teams_org_id ON teams(organization_id);
 CREATE INDEX idx_images_repo_id ON images(repository_id);
 CREATE INDEX idx_images_digest ON images(digest);
 CREATE INDEX idx_images_tag ON images(tag);
+
+-- Now add the foreign key constraint for repository_permissions.team_id
+ALTER TABLE repository_permissions 
+ADD CONSTRAINT repository_permissions_team_id_fkey 
+FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;

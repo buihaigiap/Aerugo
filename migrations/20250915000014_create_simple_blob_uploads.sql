@@ -2,9 +2,9 @@
 CREATE TABLE IF NOT EXISTS blob_uploads (
     id SERIAL PRIMARY KEY,
     uuid VARCHAR(255) NOT NULL UNIQUE,
-    repository_id VARCHAR(255) NOT NULL,
-    user_id VARCHAR(255) NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
+    repository_id BIGINT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Create indexes for performance
