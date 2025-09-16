@@ -48,7 +48,7 @@ def reset_test_data():
     # Import here to avoid circular imports
     try:
         from base_test import test_data_manager
-        test_data_manager.cleanup_test_data()
+        # test_data_manager.cleanup_test_data()
         # Small delay to ensure cleanup completes
         time.sleep(0.1)
     except ImportError:
@@ -59,7 +59,7 @@ def reset_test_data():
     # Cleanup after test
     try:
         from base_test import test_data_manager
-        test_data_manager.cleanup_test_data()
+        # test_data_manager.cleanup_test_data()
     except ImportError:
         pass
 
