@@ -2,6 +2,23 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+// Blob upload tracking models (simplified)
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct BlobUpload {
+    pub id: i32,
+    pub uuid: String,
+    pub repository_id: i64,
+    pub user_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewBlobUpload {
+    pub uuid: String,
+    pub repository_id: i64,
+    pub user_id: Option<String>,
+}
+
 // User models
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
@@ -50,7 +67,7 @@ pub struct Repository {
     pub organization_id: i64,
     pub name: String,
     pub description: Option<String>,
-    pub visibility: String, // public/private
+    pub is_public: bool, // Changed from visibility to match database schema
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

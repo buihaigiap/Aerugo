@@ -14,14 +14,12 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import test classes
-from test_health import HealthTests
 from test_auth import AuthTests
 from test_organizations import OrganizationTests  
 from test_users import UserTests
 from test_repositories import RepositoryTests
 
 # Global test instances - will be recreated for each test run
-health_tests = None
 auth_tests = None
 org_tests = None
 user_tests = None
@@ -29,12 +27,11 @@ repo_tests = None
 
 def setup_module():
     """Setup test instances - called once per module"""
-    global health_tests, auth_tests, org_tests, user_tests, repo_tests
+    global auth_tests, org_tests, user_tests, repo_tests
     
     print("\n🔧 Setting up test instances...")
     
     # Create fresh instances for each test run
-    health_tests = HealthTests()
     auth_tests = AuthTests()
     org_tests = OrganizationTests()
     user_tests = UserTests()
@@ -65,16 +62,6 @@ def setup_test_data():
     #     test_data_manager.cleanup_test_data()
     # except Exception as e:
     #     print(f"⚠️ Post-test cleanup warning: {e}")
-
-# Health Tests
-def test_health_check():
-    health_tests.test_health_check()
-
-def test_health_check_headers():
-    health_tests.test_health_check_headers()
-
-def test_health_check_methods():
-    health_tests.test_health_check_methods()
 
 # Auth Tests  
 def test_user_registration():

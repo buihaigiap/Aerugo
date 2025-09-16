@@ -13,8 +13,9 @@ use crate::{
 /// All routes are prefixed with /v2 and follow the Docker Registry V2 specification
 pub fn docker_registry_v2_router() -> Router<AppState> {
     Router::new()
-        // Base API version endpoint - must come first before path params
-        .route("/", get(docker_registry_v2::base_api))
+        
+        // Docker Registry V2 version check - explicit route first
+        .route("/", get(docker_registry_v2::version_check))
         
         // Repository catalog - specific routes before params
         .route("/_catalog", get(docker_registry_v2::get_catalog))
@@ -55,6 +56,9 @@ pub fn docker_registry_v2_router() -> Router<AppState> {
         // Blob upload operations for simple names
         .route("/:name/blobs/uploads/", post(docker_registry_v2::start_blob_upload))
         .route("/:org/:name/blobs/uploads/", post(docker_registry_v2::start_blob_upload_namespaced))
+        
+        // Blob upload by repository ID (authenticated with JWT)
+        .route("/id/:repository_id/blobs/uploads/", post(docker_registry_v2::start_blob_upload_by_id))
         
         .route("/:name/blobs/uploads/:uuid",
             get(docker_registry_v2::get_upload_status)

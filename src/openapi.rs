@@ -5,9 +5,7 @@ use utoipa::openapi::security::{SecurityScheme, Http, HttpAuthScheme};
 use crate::handlers::{
     auth,
     docker_registry_v2,
-    health,
     organizations,
-    registry,
     repositories,
 };
 use crate::models::{
@@ -18,7 +16,6 @@ use crate::models::{
     },
     repository::{Repository as RepositoryModel, RepositoryPermission, CreateRepositoryRequest, SetRepositoryPermissionsRequest, RepositoryDetailsResponse},
 };
-use crate::handlers::registry::{Repository, ImageInfo};
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
 
 /// Security addon để thêm Bearer Auth vào OpenAPI
@@ -49,9 +46,6 @@ impl Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        // Health endpoints
-        health::check,
-
         // Auth endpoints
         auth::register,
         auth::login,
@@ -71,17 +65,10 @@ impl Modify for SecurityAddon {
         // Repository endpoints
         repositories::create_repository,
         repositories::list_repositories,
-        repositories::get_repository,
         repositories::delete_repository,
-        repositories::set_repository_permissions,
+        repositories::update_repository_permissions,
 
-        // Registry endpoints
-        registry::list_repositories,
-        registry::get_repository,
-        registry::list_images,
-        
         // Docker Registry V2 API endpoints
-        docker_registry_v2::base_api,
         docker_registry_v2::get_catalog,
         docker_registry_v2::get_manifest,
         docker_registry_v2::head_manifest,
@@ -98,9 +85,6 @@ impl Modify for SecurityAddon {
     ),
     components(
         schemas(
-            // Health schemas
-            health::HealthResponse,
-
             // User schemas
             UserResponse,
             auth::RegisterRequest,
@@ -122,10 +106,16 @@ impl Modify for SecurityAddon {
             CreateRepositoryRequest,
             SetRepositoryPermissionsRequest,
             RepositoryDetailsResponse,
-
-            // Registry schemas
-            Repository,
-            ImageInfo,
+            
+            // Additional repository schemas
+            repositories::CreateRepositoryRequest,
+            repositories::RepositoryPermissionsRequest,
+            repositories::RepositoryResponse,
+            repositories::OrganizationInfo,
+            repositories::RepositoryDetailsResponse,
+            repositories::RepositoryStats,
+            repositories::RepositoryPermissionsInfo,
+            repositories::ListRepositoriesQuery,
             
             // Docker Registry V2 API schemas
             ApiVersionResponse,
@@ -137,11 +127,9 @@ impl Modify for SecurityAddon {
         )
     ),
     tags(
-        (name = "health", description = "Health check endpoints"),
         (name = "auth", description = "Authentication endpoints"),
         (name = "organizations", description = "Organization management endpoints"),
         (name = "repositories", description = "Repository management endpoints"),
-        (name = "registry", description = "Container registry operations"),
         (name = "docker-registry-v2", description = "Docker Registry V2 API - OCI Distribution Specification"),
     ),
       modifiers(&SecurityAddon)  // 👈 add this to get Bearer Auth

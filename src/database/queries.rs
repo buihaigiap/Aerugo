@@ -1,8 +1,83 @@
 use anyhow::{Context, Result};
 use sqlx::{PgPool, Postgres, Transaction};
+use tracing::{info, error};
 
 use super::models::*;
 use crate::models::repository_with_org::{RepositoryWithOrg, RepositoryWithOrgRow};
+
+// Blob upload queries (simplified)
+pub async fn create_blob_upload(
+    pool: &PgPool,
+    uuid: &str,
+    repository_id: i64,
+    user_id: Option<&str>,
+) -> Result<BlobUpload> {
+    info!("🔧 Creating blob upload: uuid={}, repository_id={}, user_id={:?}", uuid, repository_id, user_id);
+    
+    let result = sqlx::query_as::<_, BlobUpload>(
+        "INSERT INTO blob_uploads (uuid, repository_id, user_id)
+         VALUES ($1, $2, $3)
+         RETURNING id, uuid, repository_id, user_id, created_at, completed_at",
+    )
+    .bind(uuid)
+    .bind(repository_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await;
+    
+    match &result {
+        Ok(_) => info!("✅ Blob upload created successfully"),
+        Err(e) => error!("❌ Database insert error: {}", e),
+    }
+    
+    result.context("Failed to create blob upload record")
+}
+
+pub async fn update_blob_upload_completed(
+    pool: &PgPool,
+    uuid: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE blob_uploads SET completed_at = NOW() WHERE uuid = $1"
+    )
+    .bind(uuid)
+    .execute(pool)
+    .await
+    .context("Failed to update blob upload completion")?;
+    
+    Ok(())
+}
+
+// Repository queries
+pub async fn repository_exists(
+    pool: &PgPool,
+    repository_id: i64,
+) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM repositories WHERE id = $1)"
+    )
+    .bind(repository_id)
+    .fetch_one(pool)
+    .await
+    .context("Failed to check repository existence")?;
+    
+    Ok(exists)
+}
+
+pub async fn get_repository_id_by_name(
+    pool: &PgPool,
+    repository_name: &str,
+) -> Result<Option<i64>> {
+    let id = sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM repositories WHERE name = $1"
+    )
+    .bind(repository_name)
+    .fetch_optional(pool)
+    .await
+    .context("Failed to get repository ID by name")?;
+    
+    Ok(id)
+}
 
 // User queries
 pub async fn create_user(

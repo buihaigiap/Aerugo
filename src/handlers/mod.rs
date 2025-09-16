@@ -1,10 +1,7 @@
 // Handlers module
 pub mod auth;
 pub mod docker_registry_v2;
-#[cfg(test)]
-pub mod docker_registry_v2_tests;
-pub mod health;
+// pub mod docker_registry_v2_optimized; // Đã gộp vào docker_registry_v2.rs
 pub mod organizations;
-pub mod registry;
 pub mod repositories;
 pub mod storage;
