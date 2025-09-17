@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::RwLock;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use redis::{Client as RedisClient, Connection, Commands};
-use anyhow::{Result, Context};
+use redis::{Client as RedisClient, Commands};
+use anyhow::Result;
 
 /// Cache layer for Docker Registry operations
 #[derive(Clone)]
@@ -121,6 +121,67 @@ impl RegistryCache {
         })
     }
     
+    /// Cache blob metadata
+    pub async fn cache_blob_metadata(&self, digest: &str, metadata: BlobCacheMetadata) -> Result<()> {
+        // Memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.blob_metadata.insert(
+                digest.to_string(),
+                CacheEntry::new(metadata.clone(), self.config.blob_metadata_ttl),
+            );
+        }
+        
+        // Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("blob_meta:{}", digest);
+                let ttl_secs = self.config.blob_metadata_ttl.as_secs();
+                if let Ok(json_data) = serde_json::to_string(&metadata) {
+                    let _: Result<(), _> = conn.set_ex(&redis_key, json_data, ttl_secs);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get cached blob metadata
+    pub async fn get_blob_metadata(&self, digest: &str) -> Option<BlobCacheMetadata> {
+        // Try memory cache first
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.blob_metadata.get(digest) {
+                if !entry.is_expired() {
+                    return Some(entry.data.clone());
+                }
+            }
+        }
+        
+        // Try Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("blob_meta:{}", digest);
+                if let Ok(data) = conn.get::<_, String>(&redis_key) {
+                    if let Ok(metadata) = serde_json::from_str::<BlobCacheMetadata>(&data) {
+                        // Update memory cache
+                        if self.config.enable_memory {
+                            let mut cache = self.memory_cache.write().await;
+                            cache.blob_metadata.insert(
+                                digest.to_string(),
+                                CacheEntry::new(metadata.clone(), self.config.blob_metadata_ttl),
+                            );
+                        }
+                        
+                        return Some(metadata);
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
     /// Cache manifest data
     pub async fn cache_manifest(&self, key: &str, manifest: Bytes) -> Result<()> {
         // Memory cache
@@ -178,67 +239,6 @@ impl RegistryCache {
                     }
                     
                     return Some(bytes);
-                }
-            }
-        }
-        
-        None
-    }
-    
-    /// Cache blob metadata
-    pub async fn cache_blob_metadata(&self, digest: &str, metadata: BlobCacheMetadata) -> Result<()> {
-        // Memory cache
-        if self.config.enable_memory {
-            let mut cache = self.memory_cache.write().await;
-            cache.blob_metadata.insert(
-                digest.to_string(),
-                CacheEntry::new(metadata.clone(), self.config.blob_metadata_ttl),
-            );
-        }
-        
-        // Redis cache
-        if let Some(redis) = &self.redis_client {
-            if let Ok(mut conn) = redis.get_connection() {
-                let redis_key = format!("blob_meta:{}", digest);
-                let ttl_secs = self.config.blob_metadata_ttl.as_secs();
-                if let Ok(json_data) = serde_json::to_string(&metadata) {
-                    let _: Result<(), _> = conn.set_ex(&redis_key, json_data, ttl_secs);
-                }
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Get cached blob metadata
-    pub async fn get_blob_metadata(&self, digest: &str) -> Option<BlobCacheMetadata> {
-        // Try memory cache first
-        if self.config.enable_memory {
-            let cache = self.memory_cache.read().await;
-            if let Some(entry) = cache.blob_metadata.get(digest) {
-                if !entry.is_expired() {
-                    return Some(entry.data.clone());
-                }
-            }
-        }
-        
-        // Try Redis cache
-        if let Some(redis) = &self.redis_client {
-            if let Ok(mut conn) = redis.get_connection() {
-                let redis_key = format!("blob_meta:{}", digest);
-                if let Ok(data) = conn.get::<_, String>(&redis_key) {
-                    if let Ok(metadata) = serde_json::from_str::<BlobCacheMetadata>(&data) {
-                        // Update memory cache
-                        if self.config.enable_memory {
-                            let mut cache = self.memory_cache.write().await;
-                            cache.blob_metadata.insert(
-                                digest.to_string(),
-                                CacheEntry::new(metadata.clone(), self.config.blob_metadata_ttl),
-                            );
-                        }
-                        
-                        return Some(metadata);
-                    }
                 }
             }
         }
@@ -464,6 +464,28 @@ impl RegistryCache {
                     .min_by_key(|(_, entry)| entry.created_at)
                     .map(|(k, _)| k.clone()) {
                     cache.manifest_cache.remove(&oldest_key);
+                    removed += 1;
+                }
+            }
+            
+            // Remove oldest blob metadata entries
+            while removed < target_removals && !cache.blob_metadata.is_empty() {
+                if let Some(oldest_key) = cache.blob_metadata
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.created_at)
+                    .map(|(k, _)| k.clone()) {
+                    cache.blob_metadata.remove(&oldest_key);
+                    removed += 1;
+                }
+            }
+            
+            // Then remove oldest repository entries
+            while removed < target_removals && !cache.repository_cache.is_empty() {
+                if let Some(oldest_key) = cache.repository_cache
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.created_at)
+                    .map(|(k, _)| k.clone()) {
+                    cache.repository_cache.remove(&oldest_key);
                     removed += 1;
                 }
             }

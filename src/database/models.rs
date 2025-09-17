@@ -116,3 +116,40 @@ pub struct ResourcePermission {
     pub granted_at: DateTime<Utc>,
     pub granted_by: i64,
 }
+
+// Manifest models for Docker registry
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Manifest {
+    pub id: i64,
+    pub repository_id: i64,
+    pub digest: String,
+    pub media_type: String,
+    pub size: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewManifest {
+    pub repository_id: i64,
+    pub digest: String,
+    pub media_type: String,
+    pub size: i64,
+}
+
+// Tag models for Docker registry
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Tag {
+    pub id: i64,
+    pub repository_id: i64,
+    pub name: String,
+    pub manifest_id: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewTag {
+    pub repository_id: i64,
+    pub name: String,
+    pub manifest_id: i64,
+}
