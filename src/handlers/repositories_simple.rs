@@ -24,15 +24,6 @@ pub struct CreateRepositoryRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RepositoryPermissionsRequest {
-    pub user_id: Option<i64>,
-    pub organization_id: Option<i64>,
-    pub can_read: bool,
-    pub can_write: bool,
-    pub can_admin: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryResponse {
     pub id: i64,
     pub organization_id: i64,
@@ -57,21 +48,12 @@ pub struct OrganizationInfo {
 pub struct RepositoryDetailsResponse {
     pub repository: RepositoryResponse,
     pub stats: RepositoryStats,
-    pub permissions: RepositoryPermissionsInfo,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryStats {
-    pub total_images: i64,
     pub total_tags: i64,
     pub last_push: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RepositoryPermissionsInfo {
-    pub can_read: bool,
-    pub can_write: bool,
-    pub can_admin: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,9 +102,8 @@ pub async fn list_repositories(
                 o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
             FROM repositories r
             JOIN organizations o ON r.organization_id = o.id
-            LEFT JOIN repository_permissions rp ON r.id = rp.repository_id
-            LEFT JOIN organization_members om ON r.organization_id = om.organization_id
-            WHERE (rp.user_id = $1 OR om.user_id = $1)
+            JOIN organization_members om ON r.organization_id = om.organization_id
+            WHERE om.user_id = $1
             AND o.name = $2
             "#
         )
@@ -146,9 +127,8 @@ pub async fn list_repositories(
                 o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
             FROM repositories r
             JOIN organizations o ON r.organization_id = o.id
-            LEFT JOIN repository_permissions rp ON r.id = rp.repository_id
-            LEFT JOIN organization_members om ON r.organization_id = om.organization_id
-            WHERE (rp.user_id = $1 OR om.user_id = $1)
+            JOIN organization_members om ON r.organization_id = om.organization_id
+            WHERE om.user_id = $1
             "#
         )
         .bind(user_id)
@@ -213,15 +193,5 @@ pub async fn delete_repository(
 ) -> Response {
     (StatusCode::OK, Json(json!({
         "message": "Repository deletion temporarily disabled"
-    }))).into_response()
-}
-
-pub async fn update_repository_permissions(
-    Path((namespace, repo_name)): Path<(String, String)>,
-    State(state): State<AppState>,
-    Json(request): Json<RepositoryPermissionsRequest>,
-) -> Response {
-    (StatusCode::OK, Json(json!({
-        "message": "Repository permissions temporarily disabled"
     }))).into_response()
 }

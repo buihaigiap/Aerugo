@@ -170,7 +170,6 @@ pub async fn head_manifest(
     head_manifest_impl(&state, &name, &reference).await
 }
 
-/// Upload manifest - PUT /v2/<name>/manifests/<reference>
 /// Uploads an image manifest
 #[utoipa::path(
     put,

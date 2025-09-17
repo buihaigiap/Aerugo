@@ -24,26 +24,6 @@ pub struct Repository {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ToSchema)]
-pub struct RepositoryPermission {
-    /// Unique permission ID
-    pub id: i64,
-    /// Repository ID
-    pub repository_id: i64,
-    /// User ID (null if organization permission)
-    pub user_id: Option<i64>,
-    /// Organization ID (null if user permission)
-    pub organization_id: Option<i64>,
-    /// Permission level (read, write, admin)
-    pub permission: String,
-    /// User who granted this permission
-    pub granted_by: i64,
-    /// When the permission was granted
-    pub created_at: DateTime<Utc>,
-    /// When the permission was last updated
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateRepositoryRequest {
     /// Repository name (URL-friendly)
@@ -56,25 +36,10 @@ pub struct CreateRepositoryRequest {
     pub is_public: bool,
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct SetRepositoryPermissionsRequest {
-    /// User ID to grant permissions to (exclusive with organization_id)
-    pub user_id: Option<i64>,
-    /// Organization ID to grant permissions to (exclusive with user_id)
-    pub organization_id: Option<i64>,
-    /// Permission level to grant (read, write, admin)
-    #[validate(length(min = 4, max = 5))]
-    pub permission: String,
-}
-
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RepositoryDetailsResponse {
     /// Repository information
     pub repository: Repository,
     /// List of tags in the repository
     pub tags: Vec<String>,
-    /// User's permissions for this repository
-    pub user_permissions: Vec<RepositoryPermission>,
-    /// Organization permissions for this repository
-    pub org_permissions: Vec<RepositoryPermission>,
 }

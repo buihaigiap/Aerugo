@@ -14,7 +14,7 @@ use crate::models::{
         Organization, CreateOrganizationRequest, UpdateOrganizationRequest,
         AddMemberRequest, UpdateMemberRequest, OrganizationMember,
     },
-    repository::{Repository as RepositoryModel, RepositoryPermission, CreateRepositoryRequest, SetRepositoryPermissionsRequest, RepositoryDetailsResponse},
+    repository::{Repository as RepositoryModel, CreateRepositoryRequest, RepositoryDetailsResponse},
 };
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
 
@@ -66,7 +66,6 @@ impl Modify for SecurityAddon {
         repositories::create_repository,
         repositories::list_repositories,
         repositories::delete_repository,
-        repositories::update_repository_permissions,
 
         // Docker Registry V2 API endpoints
         docker_registry_v2::get_catalog,
@@ -102,19 +101,15 @@ impl Modify for SecurityAddon {
 
             // Repository schemas
             RepositoryModel,
-            RepositoryPermission,
             CreateRepositoryRequest,
-            SetRepositoryPermissionsRequest,
             RepositoryDetailsResponse,
             
             // Additional repository schemas
             repositories::CreateRepositoryRequest,
-            repositories::RepositoryPermissionsRequest,
             repositories::RepositoryResponse,
             repositories::OrganizationInfo,
             repositories::RepositoryDetailsResponse,
             repositories::RepositoryStats,
-            repositories::RepositoryPermissionsInfo,
             repositories::ListRepositoriesQuery,
             
             // Docker Registry V2 API schemas

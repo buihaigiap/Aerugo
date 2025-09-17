@@ -167,30 +167,6 @@ pub async fn create_repository(
     .context("Failed to create repository")
 }
 
-// Image metadata queries
-pub async fn create_image_metadata(
-    pool: &PgPool,
-    repo_id: i64,
-    digest: &str,
-    manifest: serde_json::Value,
-    config: serde_json::Value,
-    size_bytes: i64,
-) -> Result<ImageMetadata> {
-    sqlx::query_as::<_, ImageMetadata>(
-        "INSERT INTO image_metadata (repository_id, digest, manifest, config, size_bytes)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *",
-    )
-    .bind(repo_id)
-    .bind(digest)
-    .bind(manifest)
-    .bind(config)
-    .bind(size_bytes)
-    .fetch_one(pool)
-    .await
-    .context("Failed to create image metadata")
-}
-
 pub async fn get_repository_with_org(pool: &PgPool, repo_id: i64) -> Result<Option<RepositoryWithOrg>> {
     let row = sqlx::query_as::<_, RepositoryWithOrgRow>(
         "SELECT 
@@ -208,63 +184,30 @@ pub async fn get_repository_with_org(pool: &PgPool, repo_id: i64) -> Result<Opti
     Ok(row.map(|r| r.into()))
 }
 
-// Permission queries
+// Permission queries - simplified to only check organization membership
 pub async fn check_permission(
     pool: &PgPool,
     user_id: i64,
     resource_type: ResourceType,
     resource_id: i64,
-    required_permission: &str,
+    _required_permission: &str,
 ) -> Result<bool> {
-    // Check direct user permission
-    let direct_permission = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (
-            SELECT 1 FROM resource_permissions rp
-            JOIN permissions p ON rp.permission_id = p.id
-            WHERE rp.user_id = $1 
-            AND rp.resource_type = $2
-            AND rp.resource_id = $3
-            AND p.name = $4
-        )",
-    )
-    .bind(user_id)
-    .bind(resource_type.to_string())
-    .bind(resource_id)
-    .bind(required_permission)
-    .fetch_one(pool)
-    .await
-    .context("Failed to check direct permission")?;
-
-    if direct_permission {
-        return Ok(true);
-    }
-
-    // Check organization role permissions
+    // Only check if user is member of the organization that owns the resource
     let org_permission = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (
             SELECT 1 FROM organization_members om
-            JOIN role_permissions rp ON om.role = rp.role
-            JOIN permissions p ON rp.permission_id = p.id
             WHERE om.user_id = $1
             AND om.organization_id = (
                 CASE $2
                     WHEN 'Organization' THEN $3
                     WHEN 'Repository' THEN (SELECT organization_id FROM repositories WHERE id = $3)
-                    WHEN 'Image' THEN (
-                        SELECT r.organization_id 
-                        FROM repositories r
-                        JOIN image_metadata im ON r.id = im.repository_id
-                        WHERE im.id = $3
-                    )
                 END
             )
-            AND p.name = $4
         )",
     )
     .bind(user_id)
     .bind(resource_type.to_string())
     .bind(resource_id)
-    .bind(required_permission)
     .fetch_one(pool)
     .await
     .context("Failed to check organization permission")?;

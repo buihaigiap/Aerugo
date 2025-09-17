@@ -70,30 +70,7 @@ pub struct Repository {
     pub is_public: bool, // Changed from visibility to match database schema
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-// Image metadata models
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct ImageMetadata {
-    pub id: i64,
-    pub repository_id: i64,
-    pub digest: String,
-    pub manifest: serde_json::Value,
-    pub config: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-    pub pushed_at: DateTime<Utc>,
-    pub pulled_at: Option<DateTime<Utc>>,
-    pub size_bytes: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct ImageTag {
-    pub id: i64,
-    pub repository_id: i64,
-    pub metadata_id: i64,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_by: Option<i64>,
 }
 
 // Permission models
