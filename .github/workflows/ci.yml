@@ -19,7 +19,7 @@ env:
   SERVER_PORT: 8080
 
 jobs:
-  # Simple test runner
+  # Simple test runner4 
   run-tests:
     name: Run All Tests
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
           --health-retries 5
           
       minio:
-        image: bitnami/minio:latest
+        image: quay.io/minio/minio:latest
         ports:
           - 9001:9000
           - 9002:9001
