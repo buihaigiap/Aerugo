@@ -76,6 +76,10 @@ async fn main() -> anyhow::Result<()> {
         blob_metadata_ttl: Duration::from_secs(production_config.cache.memory.blob_metadata_ttl),
         repository_ttl: Duration::from_secs(production_config.cache.memory.repository_ttl),
         tag_ttl: Duration::from_secs(production_config.cache.memory.tag_ttl),
+        // Authentication cache TTLs
+        auth_token_ttl: Duration::from_secs(900), // 15 minutes
+        permission_ttl: Duration::from_secs(300), // 5 minutes
+        session_ttl: Duration::from_secs(1800), // 30 minutes
         max_memory_entries: production_config.cache.memory.max_entries as usize,
         enable_redis: true,
         enable_memory: true,

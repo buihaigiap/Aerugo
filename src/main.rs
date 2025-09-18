@@ -2,8 +2,10 @@ use aerugo::{create_app, AppState};
 use aerugo::config::Settings;
 use aerugo::db;
 use aerugo::storage::{Storage, s3::S3Storage};
+use aerugo::cache::{RegistryCache, CacheConfig};
 use anyhow::{Result, Context};
 use std::sync::Arc;
+use std::time::Duration;
 use secrecy::ExposeSecret;
 
 #[tokio::main]
@@ -49,12 +51,40 @@ async fn main() -> Result<()> {
     );
     println!("S3 storage initialized successfully");
 
+    // Initialize cache
+    println!("Initializing cache layer...");
+    let cache_config = CacheConfig {
+        redis_url: Some(settings.cache.redis_url.clone()),
+        manifest_ttl: Duration::from_secs(settings.cache.ttl_seconds),
+        blob_metadata_ttl: Duration::from_secs(settings.cache.ttl_seconds * 2), // 2x longer for blob metadata
+        repository_ttl: Duration::from_secs(60), // 1 minute for repo lists
+        tag_ttl: Duration::from_secs(120), // 2 minutes for tag lists
+        // Authentication cache TTLs
+        auth_token_ttl: Duration::from_secs(900), // 15 minutes
+        permission_ttl: Duration::from_secs(300), // 5 minutes
+        session_ttl: Duration::from_secs(1800), // 30 minutes
+        max_memory_entries: 10000,
+        enable_redis: true,
+        enable_memory: true,
+    };
+    
+    let cache = match RegistryCache::new(cache_config).await {
+        Ok(cache) => {
+            println!("Cache initialized successfully (Redis + Memory)");
+            Some(Arc::new(cache))
+        },
+        Err(e) => {
+            println!("Warning: Failed to initialize cache: {}. Continuing without cache.", e);
+            None
+        }
+    };
+
     // Create shared application state
     let state = AppState {
         db_pool,
         config: settings.clone(),
         storage,
-        cache: None, // TODO: Initialize Redis cache
+        cache,
     };
     println!("Application state created successfully");
 

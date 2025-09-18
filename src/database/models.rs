@@ -70,30 +70,7 @@ pub struct Repository {
     pub is_public: bool, // Changed from visibility to match database schema
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-// Image metadata models
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct ImageMetadata {
-    pub id: i64,
-    pub repository_id: i64,
-    pub digest: String,
-    pub manifest: serde_json::Value,
-    pub config: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-    pub pushed_at: DateTime<Utc>,
-    pub pulled_at: Option<DateTime<Utc>>,
-    pub size_bytes: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct ImageTag {
-    pub id: i64,
-    pub repository_id: i64,
-    pub metadata_id: i64,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_by: Option<i64>,
 }
 
 // Permission models
@@ -138,4 +115,41 @@ pub struct ResourcePermission {
     pub permission_id: i64,
     pub granted_at: DateTime<Utc>,
     pub granted_by: i64,
+}
+
+// Manifest models for Docker registry
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Manifest {
+    pub id: i64,
+    pub repository_id: i64,
+    pub digest: String,
+    pub media_type: String,
+    pub size: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewManifest {
+    pub repository_id: i64,
+    pub digest: String,
+    pub media_type: String,
+    pub size: i64,
+}
+
+// Tag models for Docker registry
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Tag {
+    pub id: i64,
+    pub repository_id: i64,
+    pub name: String,
+    pub manifest_id: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewTag {
+    pub repository_id: i64,
+    pub name: String,
+    pub manifest_id: i64,
 }

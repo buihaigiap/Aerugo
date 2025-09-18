@@ -19,7 +19,7 @@ env:
   SERVER_PORT: 8080
 
 jobs:
-  # Simple test runner
+  # Simple test runner4 
   run-tests:
     name: Run All Tests
     runs-on: ubuntu-latest
@@ -48,22 +48,26 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          
-      minio:
-        image: bitnami/minio:latest
-        ports:
-          - 9001:9000
-          - 9002:9001
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        options: >-
-          --health-cmd "curl -s http://localhost:9000/minio/health/live || exit 0"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
         
     steps:
+    - name: Start MinIO
+      run: |
+        docker run -d --name minio-server \
+          -p 9001:9000 -p 9002:9001 \
+          -e MINIO_ROOT_USER=minioadmin \
+          -e MINIO_ROOT_PASSWORD=minioadmin \
+          minio/minio:latest server /data --console-address ":9001"
+        
+        # Wait for MinIO to be ready
+        for i in {1..30}; do
+          if curl -s http://localhost:9001/minio/health/live > /dev/null; then
+            echo "MinIO is ready"
+            break
+          fi
+          echo "Waiting for MinIO... attempt $i/30"
+          sleep 2
+        done
+          
     - name: Checkout code
       uses: actions/checkout@v4
       

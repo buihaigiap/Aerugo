@@ -27,31 +27,31 @@ pub fn docker_registry_v2_router() -> Router<AppState> {
         .route("/:name/tags/list", get(docker_registry_v2::list_tags))
         .route("/:org/:name/tags/list", get(docker_registry_v2::list_tags_namespaced))
         
-        // Manifest operations for simple names
+        // Manifest operations - simple names
         .route("/:name/manifests/:reference", 
             get(docker_registry_v2::get_manifest)
                 .put(docker_registry_v2::put_manifest)
+                .head(docker_registry_v2::head_manifest)
                 .delete(docker_registry_v2::delete_manifest)
         )
         
-        // Manifest operations for namespaced names  
+        // Manifest operations - namespaced names (org/name)
         .route("/:org/:name/manifests/:reference",
             get(docker_registry_v2::get_manifest_namespaced)
                 .put(docker_registry_v2::put_manifest_namespaced)
+                .head(docker_registry_v2::head_manifest_namespaced)
                 .delete(docker_registry_v2::delete_manifest_namespaced)
         )
         
-        // HEAD requests for manifests
-        .route("/:name/manifests/:reference", axum::routing::head(docker_registry_v2::head_manifest))
-        .route("/:org/:name/manifests/:reference", axum::routing::head(docker_registry_v2::head_manifest_namespaced))
-        
         // Blob operations for simple names
-        .route("/:name/blobs/:digest", get(docker_registry_v2::get_blob))
-        .route("/:org/:name/blobs/:digest", get(docker_registry_v2::get_blob_namespaced))
-        
-        // HEAD requests for blobs
-        .route("/:name/blobs/:digest", axum::routing::head(docker_registry_v2::head_blob))
-        .route("/:org/:name/blobs/:digest", axum::routing::head(docker_registry_v2::head_blob_namespaced))
+        .route("/:name/blobs/:digest", 
+            get(docker_registry_v2::get_blob)
+                .head(docker_registry_v2::head_blob)
+        )
+        .route("/:org/:name/blobs/:digest", 
+            get(docker_registry_v2::get_blob_namespaced)
+                .head(docker_registry_v2::head_blob_namespaced)
+        )
         
         // Blob upload operations for simple names
         .route("/:name/blobs/uploads/", post(docker_registry_v2::start_blob_upload))

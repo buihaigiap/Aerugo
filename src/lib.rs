@@ -32,6 +32,8 @@ pub async fn create_app(state: AppState) -> Router {
         .nest("/api/v1", routes::api::api_router())
         // Docker Registry V2 API (includes optimized routes)
         .nest("/v2", routes::docker_registry_v2::docker_registry_v2_router())
+        // Health and monitoring endpoints  
+        .merge(routes::health::health_router())
         // Serve Swagger UI
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi))
         .layer(tower_http::trace::TraceLayer::new_for_http())

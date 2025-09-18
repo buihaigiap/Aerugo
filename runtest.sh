@@ -36,7 +36,9 @@ show_help() {
     echo "Test execution order:"
     echo "  1. Storage API tests (test_storage_python.py)"
     echo "  2. S3 Storage API tests (test_s3_storage_python.py)"
-    echo "  3. Main integration tests (pytest_integration.py or run_all_tests.py)"
+    echo "  3. Database storage tests (test_database_storage.py, test_different_manifests.py)"
+    echo "  4. Cache tests (test_cache.py)"
+    echo "  5. Main integration tests (pytest_integration.py or run_all_tests.py)"
 }
 
 # Initialize options
@@ -398,6 +400,81 @@ run_tests() {
         print_warning "S3 Storage API test file not found at $TEST_DIR/test_s3_storage_python.py"
         print_warning "Skipping S3 Storage API tests..."
         test_results+=("⚠️  S3 Storage API tests: SKIPPED")
+    fi
+
+    # Run database storage tests
+    print_status "Running database storage tests..."
+    if [ "$MOCK_ONLY_MODE" = "false" ]; then
+        # Try pytest version first (cleaner format)
+        if [ -f "$TEST_DIR/test_database_storage_pytest.py" ]; then
+            cd "$TEST_DIR"
+            if pytest -v test_database_storage_pytest.py; then
+                print_success "Database storage tests passed!"
+                test_results+=("✅ Database storage tests: PASSED")
+            else
+                print_warning "Database storage tests failed!"
+                test_results+=("❌ Database storage tests: FAILED")
+            fi
+            cd ..
+        # Fallback to original script version
+        elif [ -f "$TEST_DIR/test_database_storage.py" ]; then
+            cd "$TEST_DIR"
+            if python3 test_database_storage.py; then
+                print_success "Database storage tests passed!"
+                test_results+=("✅ Database storage tests: PASSED")
+            else
+                print_warning "Database storage tests failed!"
+                test_results+=("❌ Database storage tests: FAILED")
+            fi
+            cd ..
+        else
+            print_warning "Database storage test file not found"
+            test_results+=("⚠️  Database storage tests: SKIPPED")
+        fi
+        
+        if [ -f "$TEST_DIR/test_different_manifests.py" ]; then
+            cd "$TEST_DIR"
+            echo "🧪 Running different manifests tests via pytest..."
+            if python3 -m pytest test_different_manifests.py::test_different_manifests -v; then
+                print_success "Different manifests tests passed!"
+                test_results+=("✅ Different manifests tests: PASSED")
+            else
+                print_warning "Different manifests tests failed!"
+                test_results+=("❌ Different manifests tests: FAILED")
+            fi
+            cd ..
+        else
+            print_warning "Different manifests test file not found"
+            test_results+=("⚠️  Different manifests tests: SKIPPED")
+        fi
+        echo
+    else
+        print_warning "Skipping database storage tests in mock mode..."
+        test_results+=("⚠️  Database storage tests: SKIPPED")
+        test_results+=("⚠️  Different manifests tests: SKIPPED")
+    fi
+
+    # Run Cache tests
+    print_status "Running Cache tests..."
+    if [ "$MOCK_ONLY_MODE" = "false" ]; then
+        if [ -f "$TEST_DIR/test_cache_pytest.py" ]; then
+            cd "$TEST_DIR"
+            if pytest -v test_cache_pytest.py; then
+                print_success "Cache tests passed!"
+                test_results+=("✅ Cache tests: PASSED")
+            else
+                print_warning "Cache tests failed!"
+                test_results+=("❌ Cache tests: FAILED")
+            fi
+            cd ..
+        else
+            print_warning "Cache test file not found"
+            test_results+=("⚠️  Cache tests: SKIPPED")
+        fi
+        echo
+    else
+        print_warning "Skipping cache tests in mock mode..."
+        test_results+=("⚠️  Cache tests: SKIPPED")
     fi
 
     # Run main integration tests
