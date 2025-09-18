@@ -173,8 +173,15 @@ def test_manifest_push_and_retrieval():
 
 if __name__ == "__main__":
     try:
-        test_manifest_push_and_retrieval()
+        success = test_manifest_push_and_retrieval()
+        if success:
+            print("✅ Database storage test completed successfully!")
+            exit(0)
+        else:
+            print("❌ Database storage test failed!")
+            exit(1)
     except Exception as e:
         print(f"❌ Test failed with error: {e}")
         import traceback
         traceback.print_exc()
+        exit(1)

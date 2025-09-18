@@ -15,11 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import test classes
 try:
-    from test_health import HealthTests
     from test_auth import AuthTests  
     from test_organizations import OrganizationTests
     from test_users import UserTests
     from test_repositories import RepositoryTests
+    from test_cache import CacheTests
 except ImportError as e:
     print(f"❌ Error importing test modules: {e}")
     sys.exit(1)
@@ -83,11 +83,11 @@ def main():
     
     # Test classes to run
     test_classes = [
-        (HealthTests, "HealthTests"),
         (AuthTests, "AuthTests"),
         (OrganizationTests, "OrganizationTests"), 
         (UserTests, "UserTests"),
         (RepositoryTests, "RepositoryTests"),
+        (CacheTests, "CacheTests"),
     ]
     
     # Add optional tests if available

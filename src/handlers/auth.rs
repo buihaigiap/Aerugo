@@ -521,3 +521,61 @@ pub async fn refresh(
         })),
     )
 }
+
+/// Logout request
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct LogoutRequest {
+    /// JWT token to invalidate
+    token: String,
+}
+
+/// Logout handler to invalidate authentication cache
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    tag = "authentication",
+    request_body = LogoutRequest,
+    responses(
+        (status = 200, description = "Successfully logged out"),
+        (status = 401, description = "Invalid token"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn logout(
+    State(state): State<AppState>,
+    Json(req): Json<LogoutRequest>,
+) -> impl IntoResponse {
+    // Verify the token first
+    let claims = match crate::auth::verify_token(&req.token, state.config.auth.jwt_secret.expose_secret().as_bytes()) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Invalid token"
+                })),
+            );
+        }
+    };
+
+    // Invalidate token in cache
+    if let Some(cache) = &state.cache {
+        if let Err(e) = cache.invalidate_auth_token(&req.token).await {
+            tracing::warn!("Failed to invalidate auth token in cache: {}", e);
+        }
+
+        // Optionally invalidate user permissions
+        if let Ok(user_id) = claims.sub.parse::<i64>() {
+            if let Err(e) = cache.invalidate_user_permissions(&user_id.to_string()).await {
+                tracing::warn!("Failed to invalidate user permissions in cache: {}", e);
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "message": "Successfully logged out"
+        })),
+    )
+}

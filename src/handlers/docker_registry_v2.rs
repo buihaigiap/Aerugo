@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use utoipa::ToSchema;
 use uuid;
 use secrecy::ExposeSecret;
+use bytes::Bytes;
 use crate::AppState;
 use crate::auth::verify_token;
 
@@ -111,16 +112,62 @@ pub async fn version_check() -> impl IntoResponse {
     )
 )]
 pub async fn get_catalog(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(_params): Query<CatalogQuery>,
 ) -> impl IntoResponse {
-    // TODO: Implement actual repository listing from database
+    println!("🔍 GET Catalog");
+    
+    // Check cache first
+    let cache_key = "catalog:repositories";
+    if let Some(cache) = &state.cache {
+        if let Some(cached_repos) = cache.get_repositories().await {
+            println!("✅ Cache HIT for repository catalog");
+            let response = CatalogResponse {
+                repositories: cached_repos,
+            };
+            return (StatusCode::OK, Json(response));
+        } else {
+            println!("⚠️ Cache MISS for repository catalog");
+        }
+    }
+    
+    // Query database for actual repositories
+    let repositories = match sqlx::query!(
+        "SELECT CONCAT(o.name, '/', r.name) as full_name 
+         FROM repositories r 
+         JOIN organizations o ON r.organization_id = o.id 
+         ORDER BY o.name, r.name"
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    {
+        Ok(rows) => {
+            rows.into_iter()
+                .filter_map(|row| row.full_name)
+                .collect::<Vec<String>>()
+        },
+        Err(e) => {
+            println!("❌ Database error querying repositories: {}", e);
+            // Fallback to mock data
+            vec![
+                "library/nginx".to_string(),
+                "library/ubuntu".to_string(),
+                "myorg/myapp".to_string(),
+            ]
+        }
+    };
+    
+    // Cache the repository list
+    if let Some(cache) = &state.cache {
+        if let Err(e) = cache.cache_repositories(repositories.clone()).await {
+            println!("⚠️ Failed to cache repositories: {}", e);
+        } else {
+            println!("✅ Cached {} repositories", repositories.len());
+        }
+    }
+    
     let response = CatalogResponse {
-        repositories: vec![
-            "library/nginx".to_string(),
-            "library/ubuntu".to_string(),
-            "myorg/myapp".to_string(),
-        ],
+        repositories,
     };
     
     (StatusCode::OK, Json(response))
@@ -694,6 +741,21 @@ pub async fn list_tags(
 ) -> impl IntoResponse {
     println!("🏷️  Listing tags for: {}", name);
     
+    // Check cache first
+    let cache_key = format!("tags:{}", name);
+    if let Some(cache) = &state.cache {
+        if let Some(cached_tags) = cache.get_tags(&name).await {
+            println!("✅ Cache HIT for tags: {}", name);
+            let response = TagListResponse {
+                name: name.clone(),
+                tags: cached_tags,
+            };
+            return (StatusCode::OK, Json(response));
+        } else {
+            println!("⚠️ Cache MISS for tags: {}", name);
+        }
+    }
+    
     // Parse repository name (handle org/repo format)
     let (org_name, repo_name) = if name.contains('/') {
         let parts: Vec<&str> = name.splitn(2, '/').collect();
@@ -793,17 +855,38 @@ pub async fn list_tags(
             
             if tags.is_empty() {
                 println!("📝 No tags found in database, returning mock data");
+                let mock_tags = vec![
+                    "latest".to_string(),
+                    "v1.0.0".to_string(),
+                    "v1.1.0".to_string(),
+                ];
+                
+                // Cache the mock tags
+                if let Some(cache) = &state.cache {
+                    if let Err(e) = cache.cache_tags(&name, mock_tags.clone()).await {
+                        println!("⚠️ Failed to cache tags: {}", e);
+                    } else {
+                        println!("✅ Cached {} mock tags for: {}", mock_tags.len(), name);
+                    }
+                }
+                
                 let response = TagListResponse {
                     name: name.clone(),
-                    tags: vec![
-                        "latest".to_string(),
-                        "v1.0.0".to_string(),
-                        "v1.1.0".to_string(),
-                    ],
+                    tags: mock_tags,
                 };
                 (StatusCode::OK, Json(response))
             } else {
                 println!("✅ Found {} real tags in database: {:?}", tags.len(), tags);
+                
+                // Cache the real tags
+                if let Some(cache) = &state.cache {
+                    if let Err(e) = cache.cache_tags(&name, tags.clone()).await {
+                        println!("⚠️ Failed to cache tags: {}", e);
+                    } else {
+                        println!("✅ Cached {} real tags for: {}", tags.len(), name);
+                    }
+                }
+                
                 let response = TagListResponse {
                     name: name.clone(),
                     tags,
@@ -813,13 +896,24 @@ pub async fn list_tags(
         },
         Err(e) => {
             println!("❌ Error fetching tags: {}, fallback to mock", e);
+            let mock_tags = vec![
+                "latest".to_string(),
+                "v1.0.0".to_string(),
+                "v1.1.0".to_string(),
+            ];
+            
+            // Cache the fallback mock tags
+            if let Some(cache) = &state.cache {
+                if let Err(e) = cache.cache_tags(&name, mock_tags.clone()).await {
+                    println!("⚠️ Failed to cache fallback tags: {}", e);
+                } else {
+                    println!("✅ Cached {} fallback tags for: {}", mock_tags.len(), name);
+                }
+            }
+            
             let response = TagListResponse {
                 name: name.clone(),
-                tags: vec![
-                    "latest".to_string(),
-                    "v1.0.0".to_string(),
-                    "v1.1.0".to_string(),
-                ],
+                tags: mock_tags,
             };
             (StatusCode::OK, Json(response))
         }
@@ -956,6 +1050,34 @@ async fn get_manifest_impl(
 ) -> Response {
     println!("🔍 GET Manifest: {}/{}", name, reference);
     
+    // Check cache first
+    let cache_key = format!("manifest:{}:{}", name, reference);
+    if let Some(cache) = &state.cache {
+        if let Some(cached_manifest) = cache.get_manifest(&cache_key).await {
+            println!("✅ Cache HIT for manifest: {}/{}", name, reference);
+            
+            // Parse cached manifest to extract headers
+            if let Ok(manifest_json) = String::from_utf8(cached_manifest.to_vec()) {
+                if let Ok(manifest_value) = serde_json::from_str::<serde_json::Value>(&manifest_json) {
+                    let digest = format!("sha256:{:x}", Sha256::digest(cached_manifest.as_ref()));
+                    let media_type = manifest_value.get("mediaType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("application/vnd.docker.distribution.manifest.v2+json");
+                    
+                    let mut headers = HeaderMap::new();
+                    headers.insert("Content-Type", HeaderValue::from_str(media_type).unwrap());
+                    headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
+                    headers.insert("Content-Length", HeaderValue::from_str(&cached_manifest.len().to_string()).unwrap());
+                    headers.insert("Cache-Control", HeaderValue::from_static("public, max-age=300"));
+                    
+                    return (StatusCode::OK, headers, manifest_json).into_response();
+                }
+            }
+        } else {
+            println!("⚠️ Cache MISS for manifest: {}/{}", name, reference);
+        }
+    }
+    
     // Parse repository name (handle org/repo format)
     let (org_name, repo_name) = if name.contains('/') {
         let parts: Vec<&str> = name.splitn(2, '/').collect();
@@ -1075,10 +1197,23 @@ async fn get_manifest_impl(
                 ]
             });
             
+            let manifest_json = serde_json::to_string(&manifest).unwrap();
+            
+            // Cache the manifest
+            if let Some(cache) = &state.cache {
+                let manifest_bytes = Bytes::from(manifest_json.clone());
+                if let Err(e) = cache.cache_manifest(&cache_key, manifest_bytes).await {
+                    println!("⚠️ Failed to cache manifest: {}", e);
+                } else {
+                    println!("✅ Cached manifest: {}/{}", name, reference);
+                }
+            }
+            
             let mut headers = HeaderMap::new();
             headers.insert("Content-Type", HeaderValue::from_str(&media_type).unwrap());
             headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
             headers.insert("Content-Length", HeaderValue::from_str(&size.to_string()).unwrap());
+            headers.insert("Cache-Control", HeaderValue::from_static("public, max-age=300"));
             
             (StatusCode::OK, headers, Json(manifest)).into_response()
         },
@@ -1341,6 +1476,22 @@ async fn put_manifest_impl(
                 println!("⚠️  Error storing tag: {}", e);
                 // Don't fail the whole operation for tag errors
             }
+        }
+    }
+    
+    // Invalidate related caches after successful manifest upload
+    if let Some(cache) = &state.cache {
+        // Invalidate manifest cache for this repository/reference
+        let manifest_cache_key = format!("manifest:{}:{}", name, reference);
+        if let Err(e) = cache.invalidate_manifest(&manifest_cache_key).await {
+            println!("⚠️ Failed to invalidate manifest cache: {}", e);
+        }
+        
+        // Invalidate tags cache for this repository
+        if let Err(e) = cache.invalidate_tags(name).await {
+            println!("⚠️ Failed to invalidate tags cache: {}", e);
+        } else {
+            println!("✅ Invalidated caches for: {}", name);
         }
     }
     

@@ -10,6 +10,30 @@ use serde::{Deserialize, Serialize};
 use redis::{Client as RedisClient, Commands};
 use anyhow::Result;
 
+// Authentication cache structures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthCacheEntry {
+    pub user_id: String,
+    pub username: String,
+    pub email: String,
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionCacheEntry {
+    pub can_read: bool,
+    pub can_write: bool,
+    pub can_admin: bool,
+    pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSessionCache {
+    pub user_id: String,
+    pub last_activity: u64,
+    pub session_data: HashMap<String, String>,
+}
+
 /// Cache layer for Docker Registry operations
 #[derive(Clone)]
 pub struct RegistryCache {
@@ -25,6 +49,10 @@ struct MemoryCache {
     blob_metadata: HashMap<String, CacheEntry<BlobCacheMetadata>>,
     repository_cache: HashMap<String, CacheEntry<Vec<String>>>,
     tag_cache: HashMap<String, CacheEntry<Vec<String>>>,
+    // Authentication and permission caches
+    auth_token_cache: HashMap<String, CacheEntry<AuthCacheEntry>>,
+    permission_cache: HashMap<String, CacheEntry<PermissionCacheEntry>>,
+    user_session_cache: HashMap<String, CacheEntry<UserSessionCache>>,
 }
 
 /// Cache entry with TTL
@@ -57,6 +85,10 @@ pub struct CacheConfig {
     pub blob_metadata_ttl: Duration,
     pub repository_ttl: Duration,
     pub tag_ttl: Duration,
+    // Authentication cache TTLs
+    pub auth_token_ttl: Duration,
+    pub permission_ttl: Duration,
+    pub session_ttl: Duration,
     pub max_memory_entries: usize,
     pub enable_redis: bool,
     pub enable_memory: bool,
@@ -70,6 +102,10 @@ impl Default for CacheConfig {
             blob_metadata_ttl: Duration::from_secs(600), // 10 minutes
             repository_ttl: Duration::from_secs(60), // 1 minute
             tag_ttl: Duration::from_secs(120), // 2 minutes
+            // Authentication cache TTLs
+            auth_token_ttl: Duration::from_secs(900), // 15 minutes
+            permission_ttl: Duration::from_secs(300), // 5 minutes
+            session_ttl: Duration::from_secs(1800), // 30 minutes
             max_memory_entries: 10000,
             enable_redis: true,
             enable_memory: true,
@@ -501,6 +537,9 @@ impl RegistryCache {
                 blob_metadata_count: cache.blob_metadata.len(),
                 repository_count: cache.repository_cache.len(),
                 tag_count: cache.tag_cache.len(),
+                auth_token_count: cache.auth_token_cache.len(),
+                permission_count: cache.permission_cache.len(),
+                session_count: cache.user_session_cache.len(),
             }
         } else {
             MemoryCacheStats::default()
@@ -560,6 +599,297 @@ impl RegistryCache {
         
         Ok(())
     }
+    
+    // ============ Authentication Caching Methods ============
+    
+    /// Cache authentication token
+    pub async fn cache_auth_token(&self, token: &str, auth_entry: AuthCacheEntry) -> Result<()> {
+        // Memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.auth_token_cache.insert(
+                token.to_string(),
+                CacheEntry::new(auth_entry.clone(), self.config.auth_token_ttl),
+            );
+        }
+        
+        // Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("auth:{}", token);
+                let serialized = serde_json::to_string(&auth_entry)?;
+                let _: Result<(), _> = conn.set_ex(&redis_key, serialized, self.config.auth_token_ttl.as_secs());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get cached authentication token
+    pub async fn get_auth_token(&self, token: &str) -> Option<AuthCacheEntry> {
+        // Try memory cache first
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.auth_token_cache.get(token) {
+                if !entry.is_expired() {
+                    return Some(entry.data.clone());
+                }
+            }
+        }
+        
+        // Try Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("auth:{}", token);
+                if let Ok(data) = conn.get::<_, String>(&redis_key) {
+                    if let Ok(auth_entry) = serde_json::from_str::<AuthCacheEntry>(&data) {
+                        // Update memory cache
+                        if self.config.enable_memory {
+                            let mut cache = self.memory_cache.write().await;
+                            cache.auth_token_cache.insert(
+                                token.to_string(),
+                                CacheEntry::new(auth_entry.clone(), self.config.auth_token_ttl),
+                            );
+                        }
+                        
+                        return Some(auth_entry);
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Cache user permissions for repository
+    pub async fn cache_permissions(&self, user_id: &str, repo_name: &str, permissions: PermissionCacheEntry) -> Result<()> {
+        let cache_key = format!("{}:{}", user_id, repo_name);
+        
+        // Memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.permission_cache.insert(
+                cache_key.clone(),
+                CacheEntry::new(permissions.clone(), self.config.permission_ttl),
+            );
+        }
+        
+        // Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("perms:{}", cache_key);
+                let serialized = serde_json::to_string(&permissions)?;
+                let _: Result<(), _> = conn.set_ex(&redis_key, serialized, self.config.permission_ttl.as_secs());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get cached permissions
+    pub async fn get_permissions(&self, user_id: &str, repo_name: &str) -> Option<PermissionCacheEntry> {
+        let cache_key = format!("{}:{}", user_id, repo_name);
+        
+        // Try memory cache first
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.permission_cache.get(&cache_key) {
+                if !entry.is_expired() {
+                    return Some(entry.data.clone());
+                }
+            }
+        }
+        
+        // Try Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("perms:{}", cache_key);
+                if let Ok(data) = conn.get::<_, String>(&redis_key) {
+                    if let Ok(permissions) = serde_json::from_str::<PermissionCacheEntry>(&data) {
+                        // Update memory cache
+                        if self.config.enable_memory {
+                            let mut cache = self.memory_cache.write().await;
+                            cache.permission_cache.insert(
+                                cache_key,
+                                CacheEntry::new(permissions.clone(), self.config.permission_ttl),
+                            );
+                        }
+                        
+                        return Some(permissions);
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Cache user session data
+    pub async fn cache_session(&self, session_id: &str, session_data: UserSessionCache) -> Result<()> {
+        // Memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.user_session_cache.insert(
+                session_id.to_string(),
+                CacheEntry::new(session_data.clone(), self.config.session_ttl),
+            );
+        }
+        
+        // Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("session:{}", session_id);
+                let serialized = serde_json::to_string(&session_data)?;
+                let _: Result<(), _> = conn.set_ex(&redis_key, serialized, self.config.session_ttl.as_secs());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get cached session data
+    pub async fn get_session(&self, session_id: &str) -> Option<UserSessionCache> {
+        // Try memory cache first
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.user_session_cache.get(session_id) {
+                if !entry.is_expired() {
+                    return Some(entry.data.clone());
+                }
+            }
+        }
+        
+        // Try Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("session:{}", session_id);
+                if let Ok(data) = conn.get::<_, String>(&redis_key) {
+                    if let Ok(session_data) = serde_json::from_str::<UserSessionCache>(&data) {
+                        // Update memory cache
+                        if self.config.enable_memory {
+                            let mut cache = self.memory_cache.write().await;
+                            cache.user_session_cache.insert(
+                                session_id.to_string(),
+                                CacheEntry::new(session_data.clone(), self.config.session_ttl),
+                            );
+                        }
+                        
+                        return Some(session_data);
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Invalidate authentication cache entries
+    pub async fn invalidate_auth_token(&self, token: &str) -> Result<()> {
+        // Remove from memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.auth_token_cache.remove(token);
+        }
+        
+        // Remove from Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("auth:{}", token);
+                let _: Result<(), _> = conn.del(&redis_key);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Invalidate all permissions for a user
+    pub async fn invalidate_user_permissions(&self, user_id: &str) -> Result<()> {
+        // Remove from memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            let keys_to_remove: Vec<String> = cache.permission_cache.keys()
+                .filter(|key| key.starts_with(&format!("{}:", user_id)))
+                .cloned()
+                .collect();
+            for key in keys_to_remove {
+                cache.permission_cache.remove(&key);
+            }
+        }
+        
+        // Remove from Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let pattern = format!("perms:{}:*", user_id);
+                let keys: Vec<String> = conn.keys(&pattern).unwrap_or_default();
+                if !keys.is_empty() {
+                    let _: Result<(), _> = conn.del(&keys);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    // ============ End Authentication Caching Methods ============
+
+    /// Invalidate manifest cache entry
+    pub async fn invalidate_manifest(&self, cache_key: &str) -> Result<()> {
+        // Remove from memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.manifest_cache.remove(cache_key);
+        }
+        
+        // Remove from Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("manifest:{}", cache_key.strip_prefix("manifest:").unwrap_or(cache_key));
+                let _: Result<(), _> = conn.del(&redis_key);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Invalidate tags cache for a repository
+    pub async fn invalidate_tags(&self, repository: &str) -> Result<()> {
+        // Remove from memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.tag_cache.remove(repository);
+        }
+        
+        // Remove from Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let redis_key = format!("tags:{}", repository);
+                let _: Result<(), _> = conn.del(&redis_key);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Invalidate repository cache
+    pub async fn invalidate_repositories(&self) -> Result<()> {
+        // Remove from memory cache
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.repository_cache.clear();
+        }
+        
+        // Remove from Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let keys: Vec<String> = conn.keys("repos:*").unwrap_or_default();
+                if !keys.is_empty() {
+                    let _: Result<(), _> = conn.del(&keys);
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 /// Cache statistics
@@ -575,4 +905,7 @@ pub struct MemoryCacheStats {
     pub blob_metadata_count: usize,
     pub repository_count: usize,
     pub tag_count: usize,
+    pub auth_token_count: usize,
+    pub permission_count: usize,
+    pub session_count: usize,
 }
