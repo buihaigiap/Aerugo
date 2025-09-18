@@ -527,22 +527,22 @@ run_tests() {
     local failed_count=$(printf '%s\n' "${test_results[@]}" | grep -c "❌" 2>/dev/null || echo "0")
     local skipped_count=$(printf '%s\n' "${test_results[@]}" | grep -c "⚠️" 2>/dev/null || echo "0")
     
-    # Ensure we have numeric values
-    passed_count=${passed_count:-0}
-    failed_count=${failed_count:-0}
-    skipped_count=${skipped_count:-0}
+    # Ensure we have clean numeric values
+    passed_count=$(echo "${passed_count:-0}" | tr -d '\n\r' | head -1)
+    failed_count=$(echo "${failed_count:-0}" | tr -d '\n\r' | head -1)
+    skipped_count=$(echo "${skipped_count:-0}" | tr -d '\n\r' | head -1)
     
     print_status "Results: ${passed_count} passed, ${failed_count} failed, ${skipped_count} skipped/warnings"
     
-    # Return success if at least some tests passed and no critical failures
+    # Return success only if all critical tests passed and no failures
     if [ "${passed_count}" -gt 0 ] && [ "${failed_count}" -eq 0 ]; then
         print_success "All available tests completed successfully!"
         return 0
-    elif [ "${passed_count}" -gt 0 ]; then
-        print_warning "Tests completed with some failures, but continuing..."
-        return 0
+    elif [ "${failed_count}" -gt 0 ]; then
+        print_error "Tests completed with failures! ${failed_count} test(s) failed."
+        return 1
     else
-        print_error "All tests failed!"
+        print_error "No tests were executed or all tests were skipped!"
         return 1
     fi
 }

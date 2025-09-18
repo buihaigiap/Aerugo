@@ -65,6 +65,8 @@ impl Modify for SecurityAddon {
         // Repository endpoints
         repositories::create_repository,
         repositories::list_repositories,
+        repositories::list_repositories_by_namespace,
+        repositories::get_repository,
         repositories::delete_repository,
 
         // Docker Registry V2 API endpoints

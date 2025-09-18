@@ -32,6 +32,7 @@ pub struct RepositoryResponse {
     pub name: String,
     pub description: Option<String>,
     pub is_public: bool,
+    pub created_by: Option<i64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub organization: OrganizationInfo,
@@ -117,7 +118,7 @@ pub async fn list_repositories(
         match sqlx::query_as::<_, RepositoryWithOrgRow>(
             r#"
             SELECT DISTINCT 
-                r.id, r.organization_id, r.name, r.description, r.is_public, NULL::BIGINT as created_by, r.created_at, r.updated_at,
+                r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
                 o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
             FROM repositories r
             JOIN organizations o ON r.organization_id = o.id
@@ -142,7 +143,7 @@ pub async fn list_repositories(
         match sqlx::query_as::<_, RepositoryWithOrgRow>(
             r#"
             SELECT DISTINCT 
-                r.id, r.organization_id, r.name, r.description, r.is_public, NULL::BIGINT as created_by, r.created_at, r.updated_at,
+                r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
                 o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
             FROM repositories r
             JOIN organizations o ON r.organization_id = o.id
@@ -170,6 +171,7 @@ pub async fn list_repositories(
             name: repo.name,
             description: repo.description,
             is_public: repo.is_public,
+            created_by: repo.created_by,
             created_at: repo.created_at,
             updated_at: repo.updated_at,
             organization: OrganizationInfo {
@@ -182,9 +184,115 @@ pub async fn list_repositories(
         })
         .collect();
 
-    (StatusCode::OK, Json(json!({
-        "repositories": response_repos
-    }))).into_response()
+    // If a namespace is specified, return a direct list for compatibility
+    // If no namespace (all repositories), return wrapped in "repositories" object
+    if query.namespace.is_some() {
+        (StatusCode::OK, Json(json!(response_repos))).into_response()
+    } else {
+        (StatusCode::OK, Json(json!({
+            "repositories": response_repos
+        }))).into_response()
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/repos/repositories/{namespace}",
+    params(
+        ("namespace" = String, Path, description = "Organization namespace")
+    ),
+    responses(
+        (status = 200, description = "List of repositories in namespace", body = Vec<RepositoryResponse>),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn list_repositories_by_namespace(
+    Path(namespace): Path<String>,
+    State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
+) -> Response {
+    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
+    let user_id = match extract_user_id(auth, secret).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "Authentication required"
+            }))).into_response()
+        }
+    };
+
+    // Find the organization by name
+    let _org = match sqlx::query_as::<_, Organization>(
+        "SELECT * FROM organizations WHERE name = $1"
+    )
+    .bind(&namespace)
+    .fetch_optional(&state.db_pool)
+    .await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(json!({
+                "error": "Organization not found"
+            }))).into_response()
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Get repositories for the specific namespace
+    let repositories = match sqlx::query_as::<_, RepositoryWithOrgRow>(
+        r#"
+        SELECT DISTINCT 
+            r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+            o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+        FROM repositories r
+        JOIN organizations o ON r.organization_id = o.id
+        JOIN organization_members om ON r.organization_id = om.organization_id
+        WHERE om.user_id = $1
+        AND o.name = $2
+        "#
+    )
+    .bind(user_id)
+    .bind(&namespace)
+    .fetch_all(&state.db_pool)
+    .await {
+        Ok(repos) => repos,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    let response_repos: Vec<RepositoryResponse> = repositories
+        .into_iter()
+        .map(|repo| RepositoryResponse {
+            id: repo.id,
+            organization_id: repo.organization_id,
+            name: repo.name,
+            description: repo.description,
+            is_public: repo.is_public,
+            created_by: repo.created_by,
+            created_at: repo.created_at,
+            updated_at: repo.updated_at,
+            organization: OrganizationInfo {
+                id: repo.org_id,
+                name: repo.org_name,
+                display_name: Some(repo.org_display_name),
+                description: repo.org_description,
+                website_url: repo.org_website_url,
+            },
+        })
+        .collect();
+
+    // Return direct list for namespace-specific endpoint
+    (StatusCode::OK, Json(json!(response_repos))).into_response()
 }
 
 #[utoipa::path(
@@ -205,10 +313,19 @@ pub async fn list_repositories(
 pub async fn create_repository(
     Path(namespace): Path<String>,
     State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Json(request): Json<CreateRepositoryRequest>,
 ) -> Response {
-    // TODO: Implement proper authentication
-    // For now, we'll skip authentication and use a default user
+    // Extract user ID from JWT token
+    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
+    let user_id = match extract_user_id(auth, secret).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "Authentication required"
+            }))).into_response()
+        }
+    };
     
     // First, find the organization by name
     let org = match sqlx::query_as::<_, Organization>(
@@ -265,14 +382,15 @@ pub async fn create_repository(
 
     // Create the repository
     let repository = match sqlx::query_as::<_, crate::database::models::Repository>(
-        "INSERT INTO repositories (organization_id, name, description, is_public, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        "INSERT INTO repositories (organization_id, name, description, is_public, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *",
     )
     .bind(org.id)
     .bind(&request.name)
     .bind(&request.description)
     .bind(request.is_public)
+    .bind(user_id)
     .fetch_one(&mut *tx)
     .await {
         Ok(repo) => repo,
@@ -298,6 +416,7 @@ pub async fn create_repository(
         name: repository.name,
         description: repository.description,
         is_public: repository.is_public,
+        created_by: repository.created_by,
         created_at: repository.created_at,
         updated_at: repository.updated_at,
         organization: OrganizationInfo {
@@ -320,7 +439,10 @@ pub async fn create_repository(
         ("repo_name" = String, Path, description = "Repository name")
     ),
     responses(
-        (status = 200, description = "Repository deletion temporarily disabled"),
+        (status = 200, description = "Repository deleted successfully"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Permission denied"),
+        (status = 404, description = "Repository not found"),
         (status = 500, description = "Internal server error")
     ),
     security(
@@ -463,7 +585,149 @@ pub async fn delete_repository(
         }))).into_response()
     }
 
+    // Return 200 OK with success message
     (StatusCode::OK, Json(json!({
-        "message": format!("Repository '{}/{}' deleted successfully", namespace, repo_name)
+        "message": format!("Repository '{}/{}' has been deleted successfully", namespace, repo_name)
+    }))).into_response()
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/repos/{namespace}/repositories/{repo_name}",
+    params(
+        ("namespace" = String, Path, description = "Organization namespace"),
+        ("repo_name" = String, Path, description = "Repository name")
+    ),
+    responses(
+        (status = 200, description = "Repository details"),
+        (status = 404, description = "Repository not found"),
+        (status = 401, description = "Authentication required"),
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn get_repository(
+    Path((namespace, repo_name)): Path<(String, String)>,
+    State(state): State<AppState>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
+) -> Response {
+    // Extract user ID from JWT token
+    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
+    let user_id = match extract_user_id(auth, secret).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "Authentication required"
+            }))).into_response()
+        }
+    };
+
+    // Find the organization by name
+    let org = match sqlx::query_as::<_, Organization>(
+        "SELECT * FROM organizations WHERE name = $1"
+    )
+    .bind(&namespace)
+    .fetch_optional(&state.db_pool)
+    .await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(json!({
+                "error": format!("Organization '{}' not found", namespace)
+            }))).into_response()
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Find the repository
+    let repository = match sqlx::query_as::<_, crate::database::models::Repository>(
+        "SELECT * FROM repositories WHERE organization_id = $1 AND name = $2"
+    )
+    .bind(org.id)
+    .bind(&repo_name)
+    .fetch_optional(&state.db_pool)
+    .await {
+        Ok(Some(repo)) => repo,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(json!({
+                "error": format!("Repository '{}/{}' not found", namespace, repo_name)
+            }))).into_response()
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Check if user has access to this repository (member of organization)
+    let has_access = match sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2)"
+    )
+    .bind(org.id)
+    .bind(user_id)
+    .fetch_one(&state.db_pool)
+    .await {
+        Ok(has_access) => has_access,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Permission check error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // If repository is private, check access permissions
+    if !repository.is_public && !has_access {
+        return (StatusCode::NOT_FOUND, Json(json!({
+            "error": format!("Repository '{}/{}' not found", namespace, repo_name)
+        }))).into_response()
+    }
+
+    // Get repository tags (for now return empty list)
+    let tags: Vec<String> = vec![];
+
+    // Build user permissions (simplified)
+    let user_permissions = if has_access {
+        vec![json!({
+            "user_id": user_id,
+            "permission": "admin"
+        })]
+    } else {
+        vec![]
+    };
+
+    // Build org permissions (simplified)
+    let org_permissions = vec![json!({
+        "organization_id": org.id,
+        "permission": "read"
+    })];
+
+    let response = RepositoryResponse {
+        id: repository.id,
+        organization_id: repository.organization_id,
+        name: repository.name,
+        description: repository.description,
+        is_public: repository.is_public,
+        created_by: repository.created_by,
+        created_at: repository.created_at,
+        updated_at: repository.updated_at,
+        organization: OrganizationInfo {
+            id: org.id,
+            name: org.name,
+            display_name: Some(org.display_name),
+            description: org.description,
+            website_url: org.website_url,
+        },
+    };
+
+    (StatusCode::OK, Json(json!({
+        "repository": response,
+        "tags": tags,
+        "user_permissions": user_permissions,
+        "org_permissions": org_permissions
     }))).into_response()
 }

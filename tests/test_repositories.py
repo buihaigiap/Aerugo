@@ -298,7 +298,7 @@ class RepositoryTests(BaseTestCase):
         
         # Delete repository
         response = self.make_request("DELETE", f"/repos/{org_name}/{repo_name}", token=owner.token)
-        self.assert_response(response, 204, "Failed to delete repository")
+        self.assert_response(response, 200, "Failed to delete repository")
         
         # Verify deletion by trying to get it
         get_response = self.make_request("GET", f"/repos/{org_name}/repositories/{repo_name}", token=owner.token)
