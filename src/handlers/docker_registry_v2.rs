@@ -18,6 +18,7 @@ use secrecy::ExposeSecret;
 use bytes::Bytes;
 use crate::AppState;
 use crate::auth::verify_token;
+use crate::handlers::docker_auth::{extract_user_from_auth, check_repository_permission};
 
 /// Docker Registry V2 API version response
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -76,6 +77,7 @@ pub struct TagsQuery {
 
 /// Docker Registry V2 version check - GET /v2/
 /// Returns API version information to confirm registry compatibility
+/// This endpoint requires authentication as per Docker Registry V2 specification
 #[utoipa::path(
     get,
     path = "/v2/",
@@ -85,19 +87,34 @@ pub struct TagsQuery {
         (status = 401, description = "Authentication required"),
     )
 )]
-pub async fn version_check() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [
-            ("Docker-Distribution-API-Version", "registry/2.0"),
-            ("Content-Type", "application/json"),
-        ],
-        Json(json!({}))
-    )
+pub async fn version_check(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    println!("🔍 GET Version Check (/v2/) endpoint called!");
+    // Docker Registry V2 spec requires authentication for /v2/ endpoint
+    match extract_user_from_auth(&headers, &state, true).await {
+        Ok(_user_id) => {
+            println!("✅ Authentication successful for /v2/ endpoint");
+            (
+                StatusCode::OK,
+                [
+                    ("Docker-Distribution-API-Version", "registry/2.0"),
+                    ("Content-Type", "application/json"),
+                ],
+                Json(json!({}))
+            ).into_response()
+        }
+        Err(response) => {
+            println!("❌ Authentication failed for /v2/ endpoint");
+            response
+        }
+    }
 }
 
 /// Get repository catalog - GET /v2/_catalog
 /// Lists all repositories in the registry
+/// Requires authentication and shows only repositories user has access to
 #[utoipa::path(
     get,
     path = "/v2/_catalog",
@@ -114,67 +131,119 @@ pub async fn version_check() -> impl IntoResponse {
 pub async fn get_catalog(
     State(state): State<AppState>,
     Query(_params): Query<CatalogQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     println!("🔍 GET Catalog");
     
-    // Check cache first
-    let cache_key = "catalog:repositories";
-    if let Some(cache) = &state.cache {
-        if let Some(cached_repos) = cache.get_repositories().await {
-            println!("✅ Cache HIT for repository catalog");
-            let response = CatalogResponse {
-                repositories: cached_repos,
-            };
-            return (StatusCode::OK, Json(response));
-        } else {
-            println!("⚠️ Cache MISS for repository catalog");
+    // Require authentication for catalog access
+    let user_id = match extract_user_from_auth(&headers, &state, true).await {
+        Ok(Some(uid)) => uid,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNAUTHORIZED",
+                        "message": "Authentication required",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
         }
-    }
+        Err(response) => return response,
+    };
+
+    println!("✅ Authenticated user: {} requesting catalog", user_id);
     
-    // Query database for actual repositories
-    let repositories = match sqlx::query!(
-        "SELECT CONCAT(o.name, '/', r.name) as full_name 
-         FROM repositories r 
-         JOIN organizations o ON r.organization_id = o.id 
-         ORDER BY o.name, r.name"
-    )
-    .fetch_all(&state.db_pool)
-    .await
-    {
-        Ok(rows) => {
-            rows.into_iter()
-                .filter_map(|row| row.full_name)
-                .collect::<Vec<String>>()
-        },
-        Err(e) => {
-            println!("❌ Database error querying repositories: {}", e);
-            // Fallback to mock data
-            vec![
-                "library/nginx".to_string(),
-                "library/ubuntu".to_string(),
-                "myorg/myapp".to_string(),
-            ]
+    // Query database for repositories the user has access to
+    let repositories = if user_id.starts_with("org_") {
+        // Organization-level access - show all repositories for this organization
+        let org_id: i64 = user_id[4..].parse().unwrap_or(0);
+        match sqlx::query!(
+            "SELECT CONCAT(o.name, '/', r.name) as full_name 
+             FROM repositories r 
+             JOIN organizations o ON r.organization_id = o.id 
+             WHERE o.id = $1
+             ORDER BY o.name, r.name",
+            org_id
+        )
+        .fetch_all(&state.db_pool)
+        .await
+        {
+            Ok(rows) => {
+                rows.into_iter()
+                    .filter_map(|row| row.full_name)
+                    .collect::<Vec<String>>()
+            },
+            Err(e) => {
+                println!("❌ Database error querying repositories: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "errors": [{
+                            "code": "UNKNOWN",
+                            "message": "Internal server error",
+                            "detail": {}
+                        }]
+                    }))
+                ).into_response();
+            }
+        }
+    } else {
+        // User-level access - show repositories user has access to
+        let user_id_int: i64 = user_id.parse().unwrap_or(0);
+        match sqlx::query!(
+            "SELECT CONCAT(o.name, '/', r.name) as full_name 
+             FROM repositories r 
+             JOIN organizations o ON r.organization_id = o.id 
+             LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $1
+             WHERE om.user_id = $1 OR r.created_by = $1
+             ORDER BY o.name, r.name",
+            user_id_int
+        )
+        .fetch_all(&state.db_pool)
+        .await
+        {
+            Ok(rows) => {
+                rows.into_iter()
+                    .filter_map(|row| row.full_name)
+                    .collect::<Vec<String>>()
+            },
+            Err(e) => {
+                println!("❌ Database error querying repositories: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "errors": [{
+                            "code": "UNKNOWN",
+                            "message": "Internal server error",
+                            "detail": {}
+                        }]
+                    }))
+                ).into_response();
+            }
         }
     };
+
+    println!("📋 Found {} repositories for user", repositories.len());
     
-    // Cache the repository list
+    // Update cache if available
     if let Some(cache) = &state.cache {
         if let Err(e) = cache.cache_repositories(repositories.clone()).await {
             println!("⚠️ Failed to cache repositories: {}", e);
         } else {
-            println!("✅ Cached {} repositories", repositories.len());
+            println!("✅ Updated repository cache");
         }
     }
-    
-    let response = CatalogResponse {
-        repositories,
-    };
-    
-    (StatusCode::OK, Json(response))
+
+    let response = CatalogResponse { repositories };
+    (StatusCode::OK, Json(response)).into_response()
 }
 
 /// Get manifest - GET /v2/<name>/manifests/<reference>
 /// Retrieves an image manifest by name and reference (tag or digest)
+/// Requires authentication and pull permission
 #[utoipa::path(
     get,
     path = "/v2/{name}/manifests/{reference}",
@@ -187,16 +256,87 @@ pub async fn get_catalog(
         (status = 200, description = "Image manifest"),
         (status = 404, description = "Manifest not found"),
         (status = 401, description = "Authentication required"),
+        (status = 403, description = "Insufficient permissions"),
     )
 )]
 pub async fn get_manifest(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path((name, reference)): axum::extract::Path<(String, String)>,
 ) -> impl IntoResponse {
-    get_manifest_impl(&state, &name, &reference).await
+    // Require authentication for manifest pull
+    let user_id = match extract_user_from_auth(&headers, &state, true).await {
+        Ok(Some(uid)) => uid,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNAUTHORIZED",
+                        "message": "Authentication required",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+        Err(response) => return response,
+    };
+
+    // Parse namespace/repository from name
+    let (namespace, repository) = match parse_repository_name(&name, &user_id, &state).await {
+        Ok((ns, repo)) => (ns, repo),
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "NAME_INVALID",
+                        "message": "Invalid repository name format",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+    };
+    
+    // Check if user has pull permission
+    match check_repository_permission(&user_id, &namespace, &repository, "pull", &state).await {
+        Ok(true) => {
+            println!("✅ User {} has pull permission for {}/{}", user_id, namespace, repository);
+            get_manifest_impl(&state, &name, &reference).await
+        }
+        Ok(false) => {
+            println!("❌ User {} denied pull access to {}/{}", user_id, namespace, repository);
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "DENIED",
+                        "message": "Insufficient permissions to pull from repository",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response()
+        }
+        Err(e) => {
+            println!("❌ Error checking permissions: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNKNOWN",
+                        "message": "Internal server error",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response()
+        }
+    }
 }
 
 /// Check if manifest exists - HEAD /v2/<name>/manifests/<reference>
+/// Requires authentication and pull permission
 #[utoipa::path(
     head,
     path = "/v2/{name}/manifests/{reference}",
@@ -209,16 +349,63 @@ pub async fn get_manifest(
         (status = 200, description = "Manifest exists"),
         (status = 404, description = "Manifest not found"),
         (status = 401, description = "Authentication required"),
+        (status = 403, description = "Insufficient permissions"),
     )
 )]
 pub async fn head_manifest(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path((name, reference)): axum::extract::Path<(String, String)>,
 ) -> impl IntoResponse {
-    head_manifest_impl(&state, &name, &reference).await
+    // Require authentication for manifest head
+    let user_id = match extract_user_from_auth(&headers, &state, true).await {
+        Ok(Some(uid)) => uid,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                ""
+            ).into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                ""
+            ).into_response();
+        }
+    };
+
+    // Parse namespace/repository from name
+    let parts: Vec<&str> = name.split('/').collect();
+    if parts.len() != 2 {
+        return (StatusCode::BAD_REQUEST, "").into_response();
+    }
+
+    let (namespace, repository) = (parts[0], parts[1]);
+    
+    // Check if user has pull permission
+    match check_repository_permission(&user_id, namespace, repository, "pull", &state).await {
+        Ok(true) => {
+            // Call the existing implementation
+            let result = get_manifest_impl(&state, &name, &reference).await;
+            match result.into_response().status() {
+                StatusCode::OK => (StatusCode::OK, "").into_response(),
+                StatusCode::NOT_FOUND => (StatusCode::NOT_FOUND, "").into_response(),
+                _ => (StatusCode::INTERNAL_SERVER_ERROR, "").into_response(),
+            }
+        }
+        Ok(false) => {
+            (StatusCode::FORBIDDEN, "").into_response()
+        }
+        Err(_) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "").into_response()
+        }
+    }
 }
 
-/// Uploads an image manifest
+/// Uploads an image manifest - PUT /v2/<name>/manifests/<reference>
+/// Requires authentication and push permission
 #[utoipa::path(
     put,
     path = "/v2/{name}/manifests/{reference}",
@@ -231,18 +418,91 @@ pub async fn head_manifest(
         (status = 201, description = "Manifest uploaded"),
         (status = 400, description = "Invalid manifest"),
         (status = 401, description = "Authentication required"),
+        (status = 403, description = "Insufficient permissions"),
     )
 )]
 pub async fn put_manifest(
     State(state): State<AppState>,
-    axum::extract::Path((name, reference)): axum::extract::Path<(String, String)>,
     headers: HeaderMap,
+    axum::extract::Path((name, reference)): axum::extract::Path<(String, String)>,
     body: String,
 ) -> impl IntoResponse {
-    put_manifest_impl(&state, &name, &reference, headers, body).await
+    println!("🔄 PUT Manifest for {}/{}", name, reference);
+    
+    // Require authentication for manifest push
+    let user_id = match extract_user_from_auth(&headers, &state, true).await {
+        Ok(Some(uid)) => uid,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNAUTHORIZED",
+                        "message": "Authentication required",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+        Err(response) => return response,
+    };
+
+    // Parse namespace/repository from name
+    let (namespace, repository) = match parse_repository_name(&name, &user_id, &state).await {
+        Ok((ns, repo)) => (ns, repo),
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "NAME_INVALID",
+                        "message": "Invalid repository name format",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+    };
+    
+    // Check if user has push permission
+    match check_repository_permission(&user_id, &namespace, &repository, "push", &state).await {
+        Ok(true) => {
+            println!("✅ User {} has push permission for {}/{}", user_id, namespace, repository);
+            let user_id_int: i64 = user_id.parse().unwrap_or(0);
+            put_manifest_impl(&state, &name, &reference, headers, body, Some(user_id_int)).await.into_response()
+        }
+        Ok(false) => {
+            println!("❌ User {} denied push access to {}/{}", user_id, namespace, repository);
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "DENIED",
+                        "message": "Insufficient permissions to push to repository",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response()
+        }
+        Err(e) => {
+            println!("❌ Error checking push permissions: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNKNOWN",
+                        "message": "Internal server error",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response()
+        }
+    }
 }
 
 /// Delete manifest - DELETE /v2/<name>/manifests/<reference>
+/// Requires authentication and delete permission
 #[utoipa::path(
     delete,
     path = "/v2/{name}/manifests/{reference}",
@@ -312,6 +572,7 @@ pub async fn head_blob(
 
 /// Start blob upload - POST /v2/<name>/blobs/uploads/
 /// Initiates a resumable blob upload
+/// Requires authentication and push permission
 #[utoipa::path(
     post,
     path = "/v2/{name}/blobs/uploads/",
@@ -322,6 +583,7 @@ pub async fn head_blob(
     responses(
         (status = 202, description = "Upload initiated", body = BlobUploadResponse),
         (status = 401, description = "Authentication required"),
+        (status = 403, description = "Insufficient permissions"),
     )
 )]
 pub async fn start_blob_upload(
@@ -329,7 +591,76 @@ pub async fn start_blob_upload(
     Path(name): Path<String>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    println!("Starting blob upload for {}", name);
+    println!("🔄 Starting blob upload for {}", name);
+    
+    // Require authentication for blob upload
+    let user_id = match extract_user_from_auth(&headers, &state, true).await {
+        Ok(Some(uid)) => uid,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Basic")],
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNAUTHORIZED",
+                        "message": "Authentication required",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+        Err(response) => return response,
+    };
+
+    // Parse namespace/repository from name
+    let (namespace, repository) = match parse_repository_name(&name, &user_id, &state).await {
+        Ok((ns, repo)) => (ns, repo),
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "NAME_INVALID",
+                        "message": "Invalid repository name format",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+    };
+    
+    // Check if user has push permission
+    match check_repository_permission(&user_id, &namespace, &repository, "push", &state).await {
+        Ok(true) => {
+            println!("✅ User {} has push permission for blob upload to {}/{}", user_id, namespace, repository);
+        }
+        Ok(false) => {
+            println!("❌ User {} denied push access for blob upload to {}/{}", user_id, namespace, repository);
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "DENIED",
+                        "message": "Insufficient permissions to push to repository",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+        Err(e) => {
+            println!("❌ Error checking push permissions: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "errors": [{
+                        "code": "UNKNOWN",
+                        "message": "Internal server error",
+                        "detail": {}
+                    }]
+                }))
+            ).into_response();
+        }
+    }
     
     // Get repository ID from name
     let repository_id = match crate::database::queries::get_repository_id_by_name(&state.db_pool, &name).await {
@@ -339,16 +670,24 @@ pub async fn start_blob_upload(
             return (
                 StatusCode::NOT_FOUND,
                 Json(serde_json::json!({
-                    "error": "Repository not found"
+                    "errors": [{
+                        "code": "NAME_UNKNOWN",
+                        "message": "Repository not found",
+                        "detail": {}
+                    }]
                 }))
             ).into_response();
         }
         Err(e) => {
-            eprintln!("❌ Failed to get repository ID: {}", e);
+            println!("❌ Database error getting repository: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
-                    "error": "Database error"
+                    "errors": [{
+                        "code": "UNKNOWN",
+                        "message": "Database error",
+                        "detail": {}
+                    }]
                 }))
             ).into_response();
         }
@@ -966,7 +1305,13 @@ pub async fn put_manifest_namespaced(
     body: String,
 ) -> impl IntoResponse {
     let full_name = format!("{}/{}", org, name);
-    put_manifest_impl(&state, &full_name, &reference, headers, body).await
+    // Extract user_id from headers if available 
+    let user_id = if let Ok(Some(uid)) = extract_user_from_auth(&headers, &state, false).await {
+        uid.parse().unwrap_or(0)
+    } else {
+        0
+    };
+    put_manifest_impl(&state, &full_name, &reference, headers, body, Some(user_id)).await
 }
 
 pub async fn delete_manifest_namespaced(
@@ -1281,6 +1626,7 @@ async fn put_manifest_impl(
     reference: &str,
     headers: HeaderMap,
     body: String,
+    user_id: Option<i64>,  // Add user_id parameter
 ) -> impl IntoResponse {
     println!("🚀 PUT Manifest: {}/{} - {} bytes", name, reference, body.len());
     println!("Content-Type: {:?}", headers.get("content-type"));
@@ -1359,9 +1705,9 @@ async fn put_manifest_impl(
                 
                 // Create repository
                 match sqlx::query!(
-                    "INSERT INTO repositories (name, organization_id, is_public) 
-                     VALUES ($1, $2, true) RETURNING id",
-                    repo_name, org_id
+                    "INSERT INTO repositories (name, organization_id, is_public, created_by) 
+                     VALUES ($1, $2, true, $3) RETURNING id",
+                    repo_name, org_id, user_id
                 )
                 .fetch_one(&state.db_pool)
                 .await
@@ -1401,9 +1747,9 @@ async fn put_manifest_impl(
                 // Repository not found, create it under default organization (id=1)
                 println!("🔧 Repository {} not found, attempting to create it", repo_name);
                 match sqlx::query!(
-                    "INSERT INTO repositories (name, organization_id, is_public) 
-                     VALUES ($1, 1, true) RETURNING id",
-                    repo_name
+                    "INSERT INTO repositories (name, organization_id, is_public, created_by) 
+                     VALUES ($1, 1, true, $2) RETURNING id",
+                    repo_name, user_id
                 )
                 .fetch_one(&state.db_pool)
                 .await
@@ -1450,6 +1796,21 @@ async fn put_manifest_impl(
         },
         Err(e) => {
             println!("❌ Error storing manifest: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+            );
+        }
+    };
+    
+    // Store manifest content in S3 storage as a blob
+    let manifest_blob_key = format!("blobs/{}", digest);  // Full blobs/ path
+    match state.storage.put_blob(&manifest_blob_key, Bytes::from(body.clone())).await {
+        Ok(_) => {
+            println!("✅ Manifest content stored in S3 blobs folder: {}", manifest_blob_key);
+        },
+        Err(e) => {
+            println!("❌ Error storing manifest content in S3: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 HeaderMap::new(),
@@ -1727,6 +2088,40 @@ async fn start_blob_upload_impl(
     };
     
     (StatusCode::ACCEPTED, headers, Json(response_body)).into_response()
+}
+
+// Helper function to parse repository name into namespace and repository
+// For simple names like "hello-world", use username as namespace
+// For namespaced names like "myorg/hello-world", use explicit namespace
+async fn parse_repository_name(name: &str, user_id: &str, state: &AppState) -> Result<(String, String), String> {
+    let parts: Vec<&str> = name.split('/').collect();
+    
+    match parts.len() {
+        1 => {
+            // Simple name like "hello-world" - use username as namespace
+            let user_id_int: i64 = user_id.parse().map_err(|_| "Invalid user ID".to_string())?;
+            
+            // Fetch username from database
+            match crate::database::queries::get_user_by_id(&state.db_pool, user_id_int).await {
+                Ok(Some(user)) => {
+                    Ok((user.username, parts[0].to_string()))
+                }
+                Ok(None) => {
+                    Err("User not found".to_string())
+                }
+                Err(_) => {
+                    Err("Database error".to_string())
+                }
+            }
+        }
+        2 => {
+            // Namespaced name like "myorg/hello-world"
+            Ok((parts[0].to_string(), parts[1].to_string()))
+        }
+        _ => {
+            Err("Invalid repository name format".to_string())
+        }
+    }
 }
 
 // New function to extract user info from headers
