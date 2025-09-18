@@ -10,7 +10,6 @@ pub fn organization_router() -> Router<AppState> {
         // Organization management
         .route("/", get(organizations::list_user_organizations))
         .route("/", post(organizations::create_organization))
-        .route("/my", get(organizations::list_user_organizations))
         .route("/:id", get(organizations::get_organization))
         .route("/:id", put(organizations::update_organization))
         .route("/:id", delete(organizations::delete_organization))
