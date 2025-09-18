@@ -30,8 +30,8 @@ pub async fn create_app(state: AppState) -> Router {
     
     Router::new()
         .nest("/api/v1", routes::api::api_router())
-        // Docker Registry V2 API (includes optimized routes)
-        .nest("/v2", routes::docker_registry_v2::docker_registry_v2_router())
+        // Docker Registry V2 API routes - direct routes to avoid nesting conflicts
+        .merge(routes::docker_registry_v2::docker_registry_v2_router())
         // Health and monitoring endpoints  
         .merge(routes::health::health_router())
         // Serve Swagger UI

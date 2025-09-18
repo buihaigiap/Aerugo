@@ -40,6 +40,7 @@
 | User Management | ✅ Complete | User profiles, password management, search |
 | Organization Management | ✅ Complete | Create/update/delete orgs, member management |
 | Repository Management | ✅ Complete | Create/update/delete repos, access control |
+| **Docker Authentication** | ✅ **NEW!** | **JWT & Basic auth, permission-based access** |
 | Registry API | 🔄 In Progress | Docker Registry V2 API implementation |
 | S3 Storage Integration | 🔄 In Progress | Integration with S3-compatible storage |
 | Cache System | 📝 Planned | Redis-based caching for performance |
@@ -112,6 +113,48 @@ The `./scripts/dev.sh` script provides everything you need:
 
 ### API Documentation
 The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
+
+## 🔐 Docker Authentication
+
+Aerugo now supports full Docker Registry V2 authentication! All push/pull operations require proper authentication.
+
+### Quick Start with Docker
+
+```bash
+# 1. Start the registry
+./scripts/dev.sh run
+
+# 2. Register a new user (via API)
+curl -X POST http://localhost:8080/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"username":"myuser","password":"mypass","email":"user@example.com"}'
+
+# 3. Login with Docker CLI
+docker login localhost:8080
+Username: myuser
+Password: mypass
+
+# 4. Now you can push/pull images!
+docker tag nginx:latest localhost:8080/myorg/nginx:latest
+docker push localhost:8080/myorg/nginx:latest
+docker pull localhost:8080/myorg/nginx:latest
+```
+
+### Authentication Methods
+
+- **🔑 Basic Authentication**: For Docker CLI and container runtimes
+- **🎫 JWT Bearer Tokens**: For web applications and API clients
+- **🛡️ Permission-Based Access**: Pull, push, and delete permissions per repository
+- **👥 Organization-Level Control**: Team-based access management
+
+See [Docker Authentication Guide](docs/DOCKER_AUTHENTICATION.md) for detailed documentation.
+
+### Test Authentication
+
+```bash
+# Run comprehensive authentication tests
+./test_docker_auth.sh
+```
 
 ## 🏛️ Architecture
 
