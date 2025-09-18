@@ -1690,7 +1690,8 @@ async fn put_manifest_impl(
                                 return (
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     HeaderMap::new(),
-                                );
+                                    Json(serde_json::json!({"error": "Failed to create organization"}))
+                                ).into_response();
                             }
                         }
                     },
@@ -1699,7 +1700,8 @@ async fn put_manifest_impl(
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             HeaderMap::new(),
-                        );
+                            Json(serde_json::json!({"error": "Database error"}))
+                        ).into_response();
                     }
                 };
                 
@@ -1721,7 +1723,8 @@ async fn put_manifest_impl(
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             HeaderMap::new(),
-                        );
+                            Json(serde_json::json!({"error": "Failed to create repository"}))
+                        ).into_response();
                     }
                 }
             },
@@ -1730,7 +1733,8 @@ async fn put_manifest_impl(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     HeaderMap::new(),
-                );
+                    Json(serde_json::json!({"error": "Database error"}))
+                ).into_response();
             }
         }
     } else {
@@ -1763,7 +1767,8 @@ async fn put_manifest_impl(
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             HeaderMap::new(),
-                        );
+                            Json(serde_json::json!({"error": "Failed to create repository"}))
+                        ).into_response();
                     }
                 }
             },
@@ -1772,7 +1777,8 @@ async fn put_manifest_impl(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     HeaderMap::new(),
-                );
+                    Json(serde_json::json!({"error": "Database error"}))
+                ).into_response();
             }
         }
     };
@@ -1799,7 +1805,8 @@ async fn put_manifest_impl(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 HeaderMap::new(),
-            );
+                Json(serde_json::json!({"error": "Failed to store manifest"}))
+            ).into_response();
         }
     };
     
@@ -1814,7 +1821,8 @@ async fn put_manifest_impl(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 HeaderMap::new(),
-            );
+                Json(serde_json::json!({"error": "Failed to store manifest content"}))
+            ).into_response();
         }
     };
     
@@ -1861,7 +1869,7 @@ async fn put_manifest_impl(
     response_headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
     
     println!("🎉 Manifest successfully stored in database!");
-    (StatusCode::CREATED, response_headers)
+    (StatusCode::CREATED, response_headers, Json(serde_json::json!({}))).into_response()
 }
 
 async fn delete_manifest_impl(
