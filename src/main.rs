@@ -1,11 +1,11 @@
 use aerugo::{create_app, AppState};
 use aerugo::config::Settings;
-use aerugo::db;
 use aerugo::storage::{Storage, s3::S3Storage};
 use aerugo::cache::{RegistryCache, CacheConfig};
 use anyhow::{Result, Context};
 use std::sync::Arc;
 use std::time::Duration;
+use std::process::{Command, Stdio};
 use secrecy::ExposeSecret;
 
 #[tokio::main]
@@ -16,6 +16,23 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     tracing_subscriber::fmt::init();
+
+    // Start frontend development server in debug mode
+    #[cfg(debug_assertions)]
+    start_frontend_dev_server();
+
+    println!("🚀 Starting Aerugo Container Registry");
+    if cfg!(debug_assertions) {
+        println!("🔧 Development Mode");
+        println!("🔗 Backend API: http://localhost:8080");
+        println!("🔗 Frontend Dev: http://localhost:5173");
+        println!("🔗 API Docs: http://localhost:8080/docs");
+    } else {
+        println!("🏭 Production Mode");  
+        println!("🔗 Full Application: http://localhost:8080");
+        println!("🔗 API Docs: http://localhost:8080/docs");
+    }
+    println!();
 
     // Initialize database connection
     println!("Initializing database connection...");
@@ -108,4 +125,51 @@ async fn main() -> Result<()> {
     println!("Starting axum server...");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn start_frontend_dev_server() {
+    use std::path::Path;
+    
+    let fe_dir = "app/Fe-AI-Decenter";
+    
+    if !Path::new(fe_dir).exists() {
+        println!("⚠️  Frontend directory not found: {}", fe_dir);
+        return;
+    }
+
+    println!("📦 Starting frontend development server...");
+    
+    // Start frontend dev server in background
+    std::thread::spawn(move || {
+        // First, ensure dependencies are installed
+        let npm_install = Command::new("npm")
+            .current_dir(fe_dir)
+            .args(&["install"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+
+        if npm_install.is_err() || !npm_install.unwrap().success() {
+            eprintln!("⚠️  Failed to install frontend dependencies");
+            return;
+        }
+
+        // Start dev server
+        let _child = Command::new("npm")
+            .current_dir(fe_dir)
+            .args(&["run", "dev"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to start frontend dev server");
+
+        // Keep thread alive
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+    });
+    
+    // Give frontend server time to start
+    std::thread::sleep(std::time::Duration::from_millis(2000));
 }
