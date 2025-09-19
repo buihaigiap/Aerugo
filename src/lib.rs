@@ -1,5 +1,7 @@
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -21,6 +23,7 @@ pub struct AppState {
     pub config: config::Settings,
     pub storage: Arc<dyn storage::Storage>,
     pub cache: Option<Arc<cache::RegistryCache>>,
+    pub manifest_cache: Arc<RwLock<HashMap<String, String>>>, // digest -> content
 }
 
 /// Create the main Axum application router

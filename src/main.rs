@@ -85,6 +85,7 @@ async fn main() -> Result<()> {
         config: settings.clone(),
         storage,
         cache,
+        manifest_cache: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     };
     println!("Application state created successfully");
 

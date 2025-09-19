@@ -33,7 +33,7 @@ services:
     image: redis:7-alpine
     container_name: aerugo-redis
     ports:
-      - "6381:6379"  # Use port 6381 to avoid conflict
+      - "6380:6379"  # Use port 6380 to avoid conflict
     networks:
       - aerugo-net
     healthcheck:
@@ -50,8 +50,8 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
     ports:
-      - "9003:9000"  # MinIO API
-      - "9004:9001"  # MinIO Console
+      - "9001:9000"  # MinIO API
+      - "9002:9001"  # MinIO Console
     volumes:
       - minio_data:/data
     networks:
