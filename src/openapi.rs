@@ -50,6 +50,8 @@ impl Modify for SecurityAddon {
         auth::register,
         auth::login,
         auth::refresh,
+        auth::change_password,
+        auth::forgot_password,
 
         // Organization endpoints
         organizations::create_organization,
@@ -92,6 +94,8 @@ impl Modify for SecurityAddon {
             auth::LoginRequest,
             auth::RefreshRequest,
             auth::AuthResponse,
+            auth::ChangePasswordRequest,
+            auth::ForgotPasswordRequest,
 
             // Organization schemas
             Organization,

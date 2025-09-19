@@ -1,5 +1,5 @@
 use axum::{
-    routing::{post, get},
+    routing::{post, get, put},
     Router,
 };
 use crate::handlers::auth;
@@ -12,4 +12,6 @@ pub fn auth_router() -> Router<AppState> {
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
         .route("/refresh", post(auth::refresh))
+        .route("/change-password", put(auth::change_password))
+        .route("/forgot-password", post(auth::forgot_password))
 }
