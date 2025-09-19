@@ -115,3 +115,56 @@ def get_environment_vars() -> Dict[str, str]:
 def get_database_url() -> str:
     """Get database URL for migrations"""
     return f"postgresql://{TEST_CONFIG['database']['user']}:{TEST_CONFIG['database']['password']}@{TEST_CONFIG['database']['host']}:{TEST_CONFIG['database']['port']}/{TEST_CONFIG['database']['database']}"
+
+def get_docker_registry_auth():
+    """Get authentication credentials for Docker Registry v2 API tests"""
+    import base64
+    import requests
+    
+    # Use the first test user
+    user = TEST_USERS[0]
+    
+    # Try to register the user first (ignore if already exists)
+    try:
+        register_response = requests.post(
+            f"{API_BASE}/auth/register",
+            json={
+                "username": user.username,
+                "email": user.email,
+                "password": user.password
+            },
+            timeout=10
+        )
+        # If successful, we get a token
+        if register_response.status_code == 201:
+            data = register_response.json()
+            token = data.get("token")
+            if token:
+                return {"Authorization": f"Bearer {token}"}
+    except:
+        pass
+    
+    # If registration failed (user exists), try to login
+    try:
+        login_response = requests.post(
+            f"{API_BASE}/auth/login",
+            json={
+                "username": user.username,
+                "password": user.password
+            },
+            timeout=10
+        )
+        
+        if login_response.status_code == 200:
+            data = login_response.json()
+            token = data.get("token")
+            if token:
+                return {"Authorization": f"Bearer {token}"}
+    except:
+        pass
+    
+    # If JWT auth fails, try Basic auth (docker client style)
+    # Encode username:password in base64
+    credentials = f"{user.username}:{user.password}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+    return {"Authorization": f"Basic {encoded_credentials}"}

@@ -50,6 +50,8 @@ impl Modify for SecurityAddon {
         auth::register,
         auth::login,
         auth::refresh,
+        auth::change_password,
+        auth::forgot_password,
 
         // Organization endpoints
         organizations::create_organization,
@@ -65,6 +67,8 @@ impl Modify for SecurityAddon {
         // Repository endpoints
         repositories::create_repository,
         repositories::list_repositories,
+        repositories::list_repositories_by_namespace,
+        repositories::get_repository,
         repositories::delete_repository,
 
         // Docker Registry V2 API endpoints
@@ -90,6 +94,8 @@ impl Modify for SecurityAddon {
             auth::LoginRequest,
             auth::RefreshRequest,
             auth::AuthResponse,
+            auth::ChangePasswordRequest,
+            auth::ForgotPasswordRequest,
 
             // Organization schemas
             Organization,

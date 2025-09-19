@@ -68,13 +68,36 @@ pub async fn get_repository_id_by_name(
     pool: &PgPool,
     repository_name: &str,
 ) -> Result<Option<i64>> {
-    let id = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM repositories WHERE name = $1"
-    )
-    .bind(repository_name)
-    .fetch_optional(pool)
-    .await
-    .context("Failed to get repository ID by name")?;
+    // Handle both formats: "repo" and "org/repo"
+    let (org_name, repo_name) = if repository_name.contains('/') {
+        let parts: Vec<&str> = repository_name.splitn(2, '/').collect();
+        (Some(parts[0]), parts[1])
+    } else {
+        (None, repository_name)
+    };
+
+    let id = if let Some(org_name) = org_name {
+        // Look for repository with org/repo format
+        sqlx::query_scalar::<_, i64>(
+            "SELECT r.id FROM repositories r 
+             JOIN organizations o ON r.organization_id = o.id 
+             WHERE r.name = $1 AND o.name = $2"
+        )
+        .bind(repo_name)
+        .bind(org_name)
+        .fetch_optional(pool)
+        .await
+        .context("Failed to get repository ID by org/name")?
+    } else {
+        // Look for repository with just repo name
+        sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM repositories WHERE name = $1"
+        )
+        .bind(repo_name)
+        .fetch_optional(pool)
+        .await
+        .context("Failed to get repository ID by name")?
+    };
     
     Ok(id)
 }

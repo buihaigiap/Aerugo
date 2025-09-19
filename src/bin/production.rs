@@ -4,8 +4,10 @@ use aerugo::storage::{Storage, s3::S3Storage};
 use aerugo::{create_app, AppState};
 use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 use secrecy::ExposeSecret;
 
@@ -123,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
         config: settings.clone(),
         cache: Some(Arc::new(cache)),
         storage,
+        manifest_cache: Arc::new(RwLock::new(HashMap::new())),
     };
 
     // Create Axum application with optimized routes

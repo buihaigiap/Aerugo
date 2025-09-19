@@ -41,6 +41,7 @@ show_help() {
     echo "  5. Main integration tests (pytest_integration.py or run_all_tests.py)"
 }
 
+
 # Initialize options
 NO_SERVER=false
 SERVICES_ONLY=false

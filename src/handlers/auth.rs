@@ -12,6 +12,7 @@ use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use chrono::{Duration, Utc};
+use uuid::Uuid;
 
 /// User registration request
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -44,6 +45,30 @@ pub struct AuthResponse {
     token: String,
 }
 
+/// Password change request
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    /// Current password for verification
+    current_password: String,
+    /// New password (min 8 characters)
+    new_password: String,
+    /// Confirmation of new password (must match new_password)
+    confirm_password: String,
+}
+
+/// Forgot password request - simplified version
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ForgotPasswordRequest {
+    /// Email address to reset password for
+    email: String,
+    /// New password (optional - if provided, will reset immediately)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_password: Option<String>,
+    /// Confirmation of new password (required if new_password is provided)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confirm_password: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String, // user id
@@ -69,14 +94,14 @@ pub async fn register(
     // Input validation for registration request
     
     // Validate password length (minimum 8 characters)
-    // if req.password.len() < 4 {
-    //     return (
-    //         StatusCode::BAD_REQUEST,
-    //         Json(serde_json::json!({
-    //             "error": "Password must be at least 4 characters long"
-    //         })),
-    //     );
-    // }
+    if req.password.len() < 8 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Password must be at least 8 characters long"
+            })),
+        );
+    }
     
     // Basic email format validation
     // Check for '@' and ensure there's a domain after it
@@ -578,4 +603,309 @@ pub async fn logout(
             "message": "Successfully logged out"
         })),
     )
+}
+
+/// Change user password
+#[utoipa::path(
+    put,
+    path = "/api/v1/auth/change-password",
+    tag = "auth",
+    request_body = ChangePasswordRequest,
+    security(
+        ("Bearer" = [])
+    ),
+    responses(
+        (status = 200, description = "Password successfully changed"),
+        (status = 400, description = "Invalid request or password validation failed"),
+        (status = 401, description = "Unauthorized - invalid token or current password"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn change_password(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    State(state): State<AppState>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> impl IntoResponse {
+    // Verify JWT token
+    let claims = match crate::auth::verify_token(auth.token(), state.config.auth.jwt_secret.expose_secret().as_bytes()) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Invalid or expired token"
+                })),
+            );
+        }
+    };
+
+    // Parse user ID from claims
+    let user_id: i64 = match claims.sub.parse() {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Invalid token format"
+                })),
+            );
+        }
+    };
+
+    // Validate password requirements
+    if req.new_password.len() < 8 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "New password must be at least 8 characters long"
+            })),
+        );
+    }
+
+    if req.new_password != req.confirm_password {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "New password and confirmation do not match"
+            })),
+        );
+    }
+
+    // Get current user from database
+    let user = match sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", user_id)
+        .fetch_optional(&state.db_pool)
+        .await
+    {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "User not found"
+                })),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Database error: {}", e)
+                })),
+            );
+        }
+    };
+
+    // Verify current password
+    let parsed_hash = match PasswordHash::new(&user.password_hash) {
+        Ok(hash) => hash,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to parse stored password hash"
+                })),
+            );
+        }
+    };
+
+    if Argon2::default()
+        .verify_password(req.current_password.as_bytes(), &parsed_hash)
+        .is_err()
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "Current password is incorrect"
+            })),
+        );
+    }
+
+    // Hash the new password
+    let salt = SaltString::generate(&mut OsRng);
+    let new_password_hash = match Argon2::default()
+        .hash_password(req.new_password.as_bytes(), &salt)
+    {
+        Ok(hash) => hash.to_string(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to hash new password"
+                })),
+            );
+        }
+    };
+
+    // Update password in database
+    match sqlx::query!(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_password_hash,
+        user_id
+    )
+    .execute(&state.db_pool)
+    .await
+    {
+        Ok(_) => {
+            // Optionally invalidate existing auth tokens in cache
+            if let Some(cache) = &state.cache {
+                // Note: In a production system, you might want to invalidate all user sessions
+                // or maintain a token blacklist for better security
+                if let Err(e) = cache.invalidate_user_permissions(&user_id.to_string()).await {
+                    tracing::warn!("Failed to invalidate user permissions in cache: {}", e);
+                }
+            }
+
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "message": "Password successfully changed"
+                })),
+            )
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to update password: {}", e)
+                })),
+            );
+        }
+    }
+}
+
+/// Simplified forgot password handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    tag = "auth",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successful or email verification needed"),
+        (status = 400, description = "Invalid email format or password validation failed"),
+        (status = 404, description = "Email not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(req): Json<ForgotPasswordRequest>,
+) -> impl IntoResponse {
+    // Validate email format
+    if !req.email.contains('@') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid email format"
+            })),
+        );
+    }
+
+    // Find user by email
+    let user = match sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", req.email)
+        .fetch_optional(&state.db_pool)
+        .await
+    {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Email not found"
+                })),
+            );
+        }
+        Err(e) => {
+            tracing::error!("Database error during forgot password: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Internal server error"
+                })),
+            );
+        }
+    };
+
+    // If new password is provided, validate and reset immediately
+    if let (Some(new_password), Some(confirm_password)) = (&req.new_password, &req.confirm_password) {
+        // Validate new password
+        if new_password.len() < 8 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "New password must be at least 8 characters long"
+                })),
+            );
+        }
+
+        if new_password != confirm_password {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "New password and confirmation do not match"
+                })),
+            );
+        }
+
+        // Hash the new password
+        let salt = SaltString::generate(&mut OsRng);
+        let new_password_hash = match Argon2::default()
+            .hash_password(new_password.as_bytes(), &salt)
+        {
+            Ok(hash) => hash.to_string(),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Failed to hash new password"
+                    })),
+                );
+            }
+        };
+
+        // Update password in database
+        match sqlx::query!(
+            "UPDATE users SET password_hash = $1 WHERE id = $2",
+            new_password_hash,
+            user.id
+        )
+        .execute(&state.db_pool)
+        .await
+        {
+            Ok(_) => {
+                // Optionally invalidate user sessions in cache
+                if let Some(cache) = &state.cache {
+                    if let Err(e) = cache.invalidate_user_permissions(&user.id.to_string()).await {
+                        tracing::warn!("Failed to invalidate user permissions in cache: {}", e);
+                    }
+                }
+
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "message": "Password successfully reset",
+                        "success": true
+                    })),
+                )
+            }
+            Err(e) => {
+                tracing::error!("Failed to update password: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Failed to update password"
+                    })),
+                )
+            }
+        }
+    } else {
+        // If no password provided, just confirm email exists
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "message": "Email found. You can now provide a new password.",
+                "email_verified": true,
+                "user_id": user.id
+            })),
+        )
+    }
 }

@@ -432,7 +432,7 @@ class AuthTests(BaseTestCase):
             })
             
             # API should reject short passwords with 400 Bad Request
-            self.assert_response(response, 201, f"Short password '{pwd}' (len: {len(pwd)}) should be rejected")
+            self.assert_response(response, 400, f"Short password '{pwd}' (len: {len(pwd)}) should be rejected")
             self.logger.info(f"Short password '{pwd}' rejected as expected: {response.status_code}")
         
         self.logger.info("✅ Short password test passed")
@@ -637,6 +637,449 @@ class AuthTests(BaseTestCase):
         
         self.logger.info("✅ Rapid registration test passed")
     
+    def test_change_password_success(self):
+        """Test successful password change with valid current password"""
+        self.logger.info("Testing successful password change")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'change_pwd_{session_id}',
+            email=f'change_pwd_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        user.token = register_response.json()["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password change
+        change_data = {
+            "current_password": "originalpassword123",
+            "new_password": "newpassword456",
+            "confirm_password": "newpassword456"
+        }
+        
+        response = self.make_request(
+            "PUT", 
+            "/auth/change-password", 
+            change_data, 
+            token=user.token
+        )
+        
+        self.assert_response(response, 200, "Password change should succeed")
+        
+        # Verify response structure
+        data = response.json()
+        self.verify_json_structure(data, ["message"])
+        assert data["message"] == "Password successfully changed"
+        
+        # Verify old password no longer works
+        self.logger.info("Verifying old password no longer works")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": "originalpassword123"
+        })
+        
+        self.assert_response(login_response, 401, "Old password should be rejected")
+        
+        # Verify new password works
+        self.logger.info("Verifying new password works")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": "newpassword456"
+        })
+        
+        self.assert_response(login_response, 200, "New password should work")
+        
+        self.logger.info("✅ Password change success test passed")
+
+    def test_change_password_wrong_current_password(self):
+        """Test password change with wrong current password"""
+        self.logger.info("Testing password change with wrong current password")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'change_pwd_wrong_{session_id}',
+            email=f'change_pwd_wrong_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        user.token = register_response.json()["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password change with wrong current password
+        change_data = {
+            "current_password": "wrongpassword",
+            "new_password": "newpassword456", 
+            "confirm_password": "newpassword456"
+        }
+        
+        response = self.make_request(
+            "PUT",
+            "/auth/change-password",
+            change_data,
+            token=user.token
+        )
+        
+        self.assert_response(response, 401, "Wrong current password should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "incorrect" in data["error"].lower()
+        
+        self.logger.info("✅ Wrong current password test passed")
+
+    def test_change_password_mismatch_confirmation(self):
+        """Test password change with mismatched password confirmation"""
+        self.logger.info("Testing password change with mismatched confirmation")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'change_pwd_mismatch_{session_id}',
+            email=f'change_pwd_mismatch_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        user.token = register_response.json()["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password change with mismatched confirmation
+        change_data = {
+            "current_password": "originalpassword123",
+            "new_password": "newpassword456",
+            "confirm_password": "differentpassword"
+        }
+        
+        response = self.make_request(
+            "PUT",
+            "/auth/change-password", 
+            change_data,
+            token=user.token
+        )
+        
+        self.assert_response(response, 400, "Mismatched passwords should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "do not match" in data["error"].lower()
+        
+        self.logger.info("✅ Password mismatch test passed")
+
+    def test_change_password_short_password(self):
+        """Test password change with too short new password"""
+        self.logger.info("Testing password change with short password")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'change_pwd_short_{session_id}',
+            email=f'change_pwd_short_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        user.token = register_response.json()["token"]
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password change with short password
+        change_data = {
+            "current_password": "originalpassword123",
+            "new_password": "short",
+            "confirm_password": "short"
+        }
+        
+        response = self.make_request(
+            "PUT",
+            "/auth/change-password",
+            change_data, 
+            token=user.token
+        )
+        
+        self.assert_response(response, 400, "Short password should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "8 characters" in data["error"]
+        
+        self.logger.info("✅ Short password test passed")
+
+    def test_change_password_no_auth(self):
+        """Test password change without authentication token"""
+        self.logger.info("Testing password change without authentication")
+        
+        change_data = {
+            "current_password": "originalpassword123",
+            "new_password": "newpassword456",
+            "confirm_password": "newpassword456"
+        }
+        
+        response = self.make_request("PUT", "/auth/change-password", change_data)
+        
+        # Should return 401 or similar authentication error
+        assert response.status_code in [401, 400], f"Expected auth error, got {response.status_code}"
+        
+        self.logger.info("✅ No authentication test passed")
+
+    def test_forgot_password_email_verification(self):
+        """Test forgot password email verification step"""
+        self.logger.info("Testing forgot password email verification")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'forgot_pwd_{session_id}',
+            email=f'forgot_pwd_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test email verification
+        forgot_data = {
+            "email": user.email
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", forgot_data)
+        
+        self.assert_response(response, 200, "Email verification should succeed")
+        
+        # Verify response structure
+        data = response.json()
+        self.verify_json_structure(data, ["message", "email_verified"])
+        assert data["email_verified"] is True
+        assert "user_id" in data
+        
+        self.logger.info("✅ Email verification test passed")
+
+    def test_forgot_password_nonexistent_email(self):
+        """Test forgot password with non-existent email"""
+        self.logger.info("Testing forgot password with non-existent email")
+        
+        forgot_data = {
+            "email": "nonexistent_email@example.com"
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", forgot_data)
+        
+        self.assert_response(response, 404, "Non-existent email should return 404")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+        
+        self.logger.info("✅ Non-existent email test passed")
+
+    def test_forgot_password_complete_reset(self):
+        """Test complete forgot password flow with password reset"""
+        self.logger.info("Testing complete forgot password reset")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'forgot_complete_{session_id}',
+            email=f'forgot_complete_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test complete password reset
+        reset_data = {
+            "email": user.email,
+            "new_password": "resetpassword789",
+            "confirm_password": "resetpassword789"
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", reset_data)
+        
+        self.assert_response(response, 200, "Password reset should succeed")
+        
+        # Verify response structure
+        data = response.json()
+        self.verify_json_structure(data, ["message", "success"])
+        assert data["success"] is True
+        
+        # Verify old password no longer works
+        self.logger.info("Verifying old password no longer works")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": "originalpassword123"
+        })
+        
+        self.assert_response(login_response, 401, "Old password should be rejected")
+        
+        # Verify new password works
+        self.logger.info("Verifying new password works")
+        login_response = self.make_request("POST", "/auth/login", {
+            "email": user.email,
+            "password": "resetpassword789"
+        })
+        
+        self.assert_response(login_response, 200, "New password should work")
+        
+        self.logger.info("✅ Complete password reset test passed")
+
+    def test_forgot_password_mismatch_confirmation(self):
+        """Test forgot password with mismatched password confirmation"""
+        self.logger.info("Testing forgot password with mismatched confirmation")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'forgot_mismatch_{session_id}',
+            email=f'forgot_mismatch_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password reset with mismatched confirmation
+        reset_data = {
+            "email": user.email,
+            "new_password": "resetpassword789",
+            "confirm_password": "differentpassword"
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", reset_data)
+        
+        self.assert_response(response, 400, "Mismatched passwords should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "do not match" in data["error"].lower()
+        
+        self.logger.info("✅ Forgot password mismatch test passed")
+
+    def test_forgot_password_short_password(self):
+        """Test forgot password with too short new password"""
+        self.logger.info("Testing forgot password with short password")
+        
+        # Create test user
+        session_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        from config import TestUser
+        user = TestUser(
+            username=f'forgot_short_{session_id}',
+            email=f'forgot_short_{session_id}@example.com',
+            password='originalpassword123'
+        )
+        
+        # Register user
+        register_response = self.make_request("POST", "/auth/register", {
+            "username": user.username,
+            "email": user.email,
+            "password": user.password
+        })
+        
+        self.assert_response(register_response, 201, "User registration failed")
+        test_data_manager.track_user(user.__dict__)
+        
+        # Test password reset with short password
+        reset_data = {
+            "email": user.email,
+            "new_password": "short",
+            "confirm_password": "short"
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", reset_data)
+        
+        self.assert_response(response, 400, "Short password should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "8 characters" in data["error"]
+        
+        self.logger.info("✅ Forgot password short password test passed")
+
+    def test_forgot_password_invalid_email_format(self):
+        """Test forgot password with invalid email format"""
+        self.logger.info("Testing forgot password with invalid email format")
+        
+        # Test with invalid email format
+        reset_data = {
+            "email": "invalid-email-format"
+        }
+        
+        response = self.make_request("POST", "/auth/forgot-password", reset_data)
+        
+        self.assert_response(response, 400, "Invalid email format should be rejected")
+        
+        # Verify error message
+        data = response.json()
+        assert "error" in data
+        assert "format" in data["error"].lower()
+        
+        self.logger.info("✅ Invalid email format test passed")
+    
     def run_all_tests(self):
         """Run all authentication tests"""
         self.logger.info("=== Running Auth Tests ===")
@@ -665,5 +1108,18 @@ class AuthTests(BaseTestCase):
         self.test_login_case_sensitivity()
         self.test_registration_max_length()
         self.test_rapid_consecutive_registrations()
+        
+        # Password management tests
+        self.test_change_password_success()
+        self.test_change_password_wrong_current_password()
+        self.test_change_password_mismatch_confirmation()
+        self.test_change_password_short_password()
+        self.test_change_password_no_auth()
+        self.test_forgot_password_email_verification()
+        self.test_forgot_password_nonexistent_email()
+        self.test_forgot_password_complete_reset()
+        self.test_forgot_password_mismatch_confirmation()
+        self.test_forgot_password_short_password()
+        self.test_forgot_password_invalid_email_format()
         
         self.logger.info("✅ All auth tests passed")
