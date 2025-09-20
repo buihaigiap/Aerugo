@@ -30,9 +30,21 @@ pub struct AppState {
 
 // Handler for serving index.html (SPA entry point)
 async fn serve_spa() -> Result<Html<String>, StatusCode> {
-    match tokio::fs::read_to_string("dist/static/index.html").await {
-        Ok(content) => Ok(Html(content)),
-        Err(_) => Ok(Html(r#"
+    // Try different locations for the frontend
+    let paths = [
+        "app/Fe-AI-Decenter/dist/index.html",  // Docker container path
+        "dist/static/index.html",             // Local dev path
+        "app/Fe-AI-Decenter/index.html",     // Fallback
+    ];
+    
+    for path in paths {
+        if let Ok(content) = tokio::fs::read_to_string(path).await {
+            return Ok(Html(content));
+        }
+    }
+    
+    // If no frontend found, show fallback
+    Ok(Html(r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -55,7 +67,6 @@ async fn serve_spa() -> Result<Html<String>, StatusCode> {
 </body>
 </html>
         "#.to_string()))
-    }
 }
 
 // Fallback handler for SPA routes

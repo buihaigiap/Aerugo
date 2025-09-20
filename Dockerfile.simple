@@ -1,0 +1,17 @@
+FROM decenter/aerugo:latest
+
+USER root
+
+# Set default environment variables
+ENV STORAGE_ENDPOINT="http://localhost:9001"
+ENV REDIS_URL="redis://localhost:6380"
+ENV LISTEN_ADDRESS="0.0.0.0:8080"
+
+# Copy updated startup script  
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
+
+USER aerugo
+
+# Use the startup script
+CMD ["./start.sh"]

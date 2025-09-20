@@ -1,23 +1,71 @@
-# Production Dockerfile for Aerugo Registry
-FROM rust:1.80 as builder
+# Multi-stage build for Aerugo Registry
+FROM rustlang/rust:nightly as builder
+
+# Install build dependencies including Node.js
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Accept DATABASE_URL as build argument
+ARG DATABASE_URL
+
+# Copy build files
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY migrations ./migrations
 
-# Build the application in release mode
-RUN cargo build --release --bin aerugo
+# Copy and setup frontend for development
+COPY app/Fe-AI-Decenter ./app/Fe-AI-Decenter
+RUN cd app/Fe-AI-Decenter && \
+    npm install
 
-# Runtime stage - use slim debian for smaller size
-FROM debian:bookworm-slim
+# Build the application
+# Use local DATABASE_URL for build, will be overridden at runtime
+# Install PostgreSQL for build-time database
+RUN apt-get update && apt-get install -y postgresql postgresql-contrib && \
+    service postgresql start && \
+    su - postgres -c "createuser --superuser aerugo" && \
+    su - postgres -c "createdb aerugo_dev" && \
+    su - postgres -c "psql -c \"ALTER USER aerugo PASSWORD 'development';\""
 
-# Install runtime dependencies
+# Check PostgreSQL status and run migrations before building
+RUN echo "Setting up database for SQLX macros" && \
+    service postgresql start && \
+    sleep 10 && \
+    su - postgres -c "psql -c \"\\l\"" && \
+    su - postgres -c "psql -c \"SELECT version();\"" && \
+    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" cargo install sqlx-cli --no-default-features --features native-tls,postgres && \
+    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" sqlx migrate run && \
+    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" cargo build --release --bin aerugo --verbose
+
+# Runtime stage - use same base as builder for Node.js compatibility
+FROM rustlang/rust:nightly
+
+# Install runtime dependencies including Node.js
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y ca-certificates curl \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary
 COPY --from=builder /app/target/release/aerugo /usr/local/bin/aerugo
+
+# Copy migrations
+COPY --from=builder /app/migrations ./migrations
+
+# Copy frontend
+COPY --from=builder /app/app/Fe-AI-Decenter ./app/Fe-AI-Decenter
+
+# Copy startup script
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
 # Create non-root user for security
 RUN useradd -r -s /bin/false -m aerugo
@@ -26,11 +74,17 @@ RUN useradd -r -s /bin/false -m aerugo
 RUN mkdir -p /app && chown aerugo:aerugo /app
 WORKDIR /app
 
+# Change ownership to app user
+RUN chown -R aerugo:aerugo /app /usr/local/bin/aerugo
+
 USER aerugo
-EXPOSE 8080
+EXPOSE 8080 5173
 
-# Health check
+# Note: DATABASE_URL should be provided when running the container
+# Example: docker run -e DATABASE_URL="your_database_url" aerugo:latest
+
+# Health check - use simpler check to avoid auth issues
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/v2/ || exit 1
+    CMD curl -f http://localhost:8080/docs || exit 1
 
-CMD ["aerugo"]
+CMD ["./start.sh"]
