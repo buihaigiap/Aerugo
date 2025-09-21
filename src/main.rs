@@ -96,6 +96,23 @@ async fn main() -> Result<()> {
         }
     };
 
+    // Initialize email service
+    println!("Initializing email service...");
+    let email_service = match aerugo::email::EmailService::new(settings.email.clone()) {
+        Ok(service) => {
+            if settings.email.test_mode {
+                println!("Email service initialized in TEST MODE");
+            } else {
+                println!("Email service initialized with SMTP: {}:{}", 
+                    settings.email.smtp_host, settings.email.smtp_port);
+            }
+            Arc::new(service)
+        },
+        Err(e) => {
+            return Err(anyhow::anyhow!("Failed to initialize email service: {}", e));
+        }
+    };
+
     // Create shared application state
     let state = AppState {
         db_pool,
@@ -103,6 +120,7 @@ async fn main() -> Result<()> {
         storage,
         cache,
         manifest_cache: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        email_service,
     };
     println!("Application state created successfully");
 

@@ -14,4 +14,5 @@ pub fn auth_router() -> Router<AppState> {
         .route("/refresh", post(auth::refresh))
         .route("/change-password", put(auth::change_password))
         .route("/forgot-password", post(auth::forgot_password))
+        .route("/verify-otp", post(auth::verify_otp_and_reset))
 }

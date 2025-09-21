@@ -17,6 +17,8 @@ pub struct Settings {
     pub cache: CacheSettings,
     #[validate]
     pub auth: AuthSettings,
+    #[validate]
+    pub email: EmailSettings,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
@@ -225,6 +227,26 @@ impl Settings {
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(604800),
             },
+            email: EmailSettings {
+                smtp_host: std::env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string()),
+                smtp_port: std::env::var("SMTP_PORT")
+                    .ok()
+                    .and_then(|p| p.parse().ok())
+                    .unwrap_or(587),
+                smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_else(|_| "".to_string()),
+                smtp_password: Secret::new(std::env::var("SMTP_PASSWORD").unwrap_or_else(|_| "".to_string())),
+                from_email: std::env::var("FROM_EMAIL").unwrap_or_else(|_| "noreply@localhost".to_string()),
+                from_name: std::env::var("FROM_NAME").unwrap_or_else(|_| "Aerugo Registry".to_string()),
+                use_tls: std::env::var("SMTP_USE_TLS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(true),
+                test_mode: std::env::var("EMAIL_TEST_MODE")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(cfg!(debug_assertions)), // Use test mode in development by default
+                test_email_file: std::env::var("EMAIL_TEST_FILE").ok(),
+            },
         };
 
         settings
@@ -241,6 +263,7 @@ impl Settings {
         self.storage.validate()?;
         self.cache.validate()?;
         self.auth.validate()?;
+        self.email.validate()?;
         Ok(())
     }
 
@@ -279,4 +302,18 @@ fn validate_url(url: &str) -> Result<(), validator::ValidationError> {
     Url::parse(url)
         .map(|_| ())
         .map_err(|_| validator::ValidationError::new("invalid_url"))
+}
+
+#[derive(Debug, Deserialize, Clone, Validate)]
+pub struct EmailSettings {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: Secret<String>,
+    pub from_email: String,
+    pub from_name: String,
+    pub use_tls: bool,
+    // For testing environment
+    pub test_mode: bool,
+    pub test_email_file: Option<String>,
 }
