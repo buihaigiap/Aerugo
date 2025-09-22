@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Aerugo Development Environment Setup Script
