@@ -890,6 +890,85 @@ impl RegistryCache {
         
         Ok(())
     }
+
+    /// Cache OTP code for password reset
+    pub async fn cache_otp_code(&self, email: &str, otp_code: &str, ttl: Duration) -> Result<()> {
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            let cache_key = format!("otp:reset:{}", email);
+            cache.user_session_cache.insert(
+                cache_key,
+                CacheEntry::new(UserSessionCache {
+                    user_id: email.to_string(), // Using email as user_id for OTP
+                    last_activity: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                    session_data: {
+                        let mut map = HashMap::new();
+                        map.insert("otp_code".to_string(), otp_code.to_string());
+                        map
+                    },
+                }, ttl),
+            );
+        }
+
+        if self.config.enable_redis && self.redis_client.is_some() {
+            if let Some(redis) = &self.redis_client {
+                if let Ok(mut conn) = redis.get_connection() {
+                    let redis_key = format!("otp:reset:{}", email);
+                    let _: Result<(), _> = conn.set_ex(&redis_key, otp_code, ttl.as_secs() as u64);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get cached OTP code
+    pub async fn get_otp_code(&self, email: &str) -> Option<String> {
+        let cache_key = format!("otp:reset:{}", email);
+        
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.user_session_cache.get(&cache_key) {
+                if !entry.is_expired() {
+                    if let Some(otp_code) = entry.data.session_data.get("otp_code") {
+                        return Some(otp_code.clone());
+                    }
+                }
+            }
+        }
+
+        if self.config.enable_redis && self.redis_client.is_some() {
+            if let Some(redis) = &self.redis_client {
+                if let Ok(mut conn) = redis.get_connection() {
+                    if let Ok(otp_code) = conn.get::<_, String>(&cache_key) {
+                        return Some(otp_code);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Remove OTP code (after use)
+    pub async fn remove_otp_code(&self, email: &str) -> Result<()> {
+        let cache_key = format!("otp:reset:{}", email);
+        
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            cache.user_session_cache.remove(&cache_key);
+        }
+
+        if self.config.enable_redis && self.redis_client.is_some() {
+            if let Some(redis) = &self.redis_client {
+                if let Ok(mut conn) = redis.get_connection() {
+                    let _: Result<(), _> = conn.del(&cache_key);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Cache statistics

@@ -60,13 +60,24 @@ pub struct ChangePasswordRequest {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ForgotPasswordRequest {
     /// Email address to reset password for
-    email: String,
-    /// New password (optional - if provided, will reset immediately)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    new_password: Option<String>,
-    /// Confirmation of new password (required if new_password is provided)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    confirm_password: Option<String>,
+    #[schema(example = "user@example.com")]
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct VerifyOtpRequest {
+    /// Email address 
+    #[schema(example = "user@example.com")]
+    pub email: String,
+    /// 6-digit OTP code
+    #[schema(example = "123456")]
+    pub otp_code: String,
+    /// New password
+    #[schema(example = "newpassword123")]
+    pub new_password: String,
+    /// Confirm new password
+    #[schema(example = "newpassword123")]
+    pub confirm_password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -773,16 +784,15 @@ pub async fn change_password(
     }
 }
 
-/// Simplified forgot password handler
+/// NEW: Simple forgot password with 6-digit OTP
 #[utoipa::path(
     post,
     path = "/api/v1/auth/forgot-password",
     tag = "auth",
     request_body = ForgotPasswordRequest,
     responses(
-        (status = 200, description = "Password reset successful or email verification needed"),
-        (status = 400, description = "Invalid email format or password validation failed"),
-        (status = 404, description = "Email not found"),
+        (status = 200, description = "Password reset OTP sent to email"),
+        (status = 400, description = "Invalid email or user not found"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -790,122 +800,165 @@ pub async fn forgot_password(
     State(state): State<AppState>,
     Json(req): Json<ForgotPasswordRequest>,
 ) -> impl IntoResponse {
-    // Validate email format
-    if !req.email.contains('@') {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "Invalid email format"
-            })),
-        );
-    }
-
     // Find user by email
-    let user = match sqlx::query_as!(User, "SELECT * FROM users WHERE email = $1", req.email)
+    let user = match sqlx::query!("SELECT id, username, email FROM users WHERE email = $1", req.email)
         .fetch_optional(&state.db_pool)
         .await
     {
         Ok(Some(user)) => user,
         Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "Email not found"
-                })),
-            );
+            return Json(serde_json::json!({
+                "error": "Email not found"
+            }));
         }
-        Err(e) => {
-            tracing::error!("Database error during forgot password: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Internal server error"
-                })),
-            );
+        Err(_) => {
+            return Json(serde_json::json!({
+                "error": "Internal server error"  
+            }));
         }
     };
 
-    // If new password is provided, validate and reset immediately
-    if let (Some(new_password), Some(confirm_password)) = (&req.new_password, &req.confirm_password) {
-        // Validate new password
-        if new_password.len() < 8 {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "New password must be at least 8 characters long"
-                })),
-            );
+    // Generate 6-digit code
+    use rand::Rng;
+    let otp_code: u32 = rand::thread_rng().gen_range(100000..=999999);
+    let otp_string = otp_code.to_string();
+    
+    // Store OTP in Redis cache with 15 minutes TTL
+    if let Some(cache) = &state.cache {
+        if let Err(e) = cache.cache_otp_code(&user.email, &otp_string, std::time::Duration::from_secs(900)).await {
+            tracing::warn!("Failed to store OTP in cache: {}", e);
+            return Json(serde_json::json!({
+                "error": "Failed to generate OTP code"
+            }));
         }
+    } else {
+        return Json(serde_json::json!({
+            "error": "OTP service not available"
+        }));
+    }
+    
+    // Send email
+    match state.email_service.send_forgot_password_email(
+        &user.email, 
+        &user.username,
+        &otp_string,
+        ""
+    ).await {
+        Ok(()) => Json(serde_json::json!({
+            "message": "Password reset instructions have been sent to your email",
+            "email_sent": true
+        })),
+        Err(_) => Json(serde_json::json!({
+            "error": "Failed to send email"
+        }))
+    }
+}
 
-        if new_password != confirm_password {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "New password and confirmation do not match"
-                })),
-            );
-        }
+/// Verify OTP and reset password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-otp",
+    tag = "auth",
+    request_body = VerifyOtpRequest,
+    responses(
+        (status = 200, description = "Password successfully reset"),
+        (status = 400, description = "Invalid OTP, passwords don't match, or validation failed"),
+        (status = 404, description = "OTP expired or does not exist"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn verify_otp_and_reset(
+    State(state): State<AppState>,
+    Json(req): Json<VerifyOtpRequest>,
+) -> impl IntoResponse {
+    // Validate passwords match
+    if req.new_password != req.confirm_password {
+        return Json(serde_json::json!({
+            "error": "Passwords do not match"
+        }));
+    }
+    
+    // Validate password length
+    if req.new_password.len() < 8 {
+        return Json(serde_json::json!({
+            "error": "Password must be at least 8 characters long"
+        }));
+    }
 
-        // Hash the new password
-        let salt = SaltString::generate(&mut OsRng);
-        let new_password_hash = match Argon2::default()
-            .hash_password(new_password.as_bytes(), &salt)
-        {
-            Ok(hash) => hash.to_string(),
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({
-                        "error": "Failed to hash new password"
-                    })),
-                );
-            }
-        };
-
-        // Update password in database
-        match sqlx::query!(
-            "UPDATE users SET password_hash = $1 WHERE id = $2",
-            new_password_hash,
-            user.id
-        )
-        .execute(&state.db_pool)
+    // Find user by email
+    let user = match sqlx::query!("SELECT id, username, email FROM users WHERE email = $1", req.email)
+        .fetch_optional(&state.db_pool)
         .await
-        {
-            Ok(_) => {
-                // Optionally invalidate user sessions in cache
-                if let Some(cache) = &state.cache {
-                    if let Err(e) = cache.invalidate_user_permissions(&user.id.to_string()).await {
-                        tracing::warn!("Failed to invalidate user permissions in cache: {}", e);
-                    }
-                }
+    {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return Json(serde_json::json!({
+                "error": "Email not found"
+            }));
+        }
+        Err(_) => {
+            return Json(serde_json::json!({
+                "error": "Internal server error"  
+            }));
+        }
+    };
 
-                (
-                    StatusCode::OK,
-                    Json(serde_json::json!({
-                        "message": "Password successfully reset",
-                        "success": true
-                    })),
-                )
+    // Validate OTP format
+    if req.otp_code.len() != 6 || !req.otp_code.chars().all(|c| c.is_ascii_digit()) {
+        return Json(serde_json::json!({
+            "error": "Invalid OTP code. Must be 6 digits."
+        }));
+    }
+    
+    // Verify OTP from Redis cache
+    if let Some(cache) = &state.cache {
+        match cache.get_otp_code(&req.email).await {
+            Some(stored_otp) => {
+                if stored_otp != req.otp_code {
+                    return Json(serde_json::json!({
+                        "error": "Invalid OTP code"
+                    }));
+                }
+                // OTP is valid, delete it to prevent reuse
+                let _ = cache.remove_otp_code(&req.email).await;
             }
-            Err(e) => {
-                tracing::error!("Failed to update password: {}", e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({
-                        "error": "Failed to update password"
-                    })),
-                )
+            None => {
+                return Json(serde_json::json!({
+                    "error": "OTP code has expired or does not exist"
+                }));
             }
         }
     } else {
-        // If no password provided, just confirm email exists
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "message": "Email found. You can now provide a new password.",
-                "email_verified": true,
-                "user_id": user.id
-            })),
-        )
+        return Json(serde_json::json!({
+            "error": "OTP verification service not available"
+        }));
     }
-}
+
+    // Hash new password
+    use argon2::{Argon2, PasswordHasher};
+    use argon2::password_hash::{SaltString, rand_core::OsRng};
+    
+    let salt = SaltString::generate(&mut OsRng);
+    let password_hash = match Argon2::default().hash_password(req.new_password.as_bytes(), &salt) {
+        Ok(hash) => hash.to_string(),
+        Err(_) => {
+            return Json(serde_json::json!({
+                "error": "Failed to hash password"
+            }));
+        }
+    };
+
+    // Update password in database
+    match sqlx::query!("UPDATE users SET password_hash = $1 WHERE id = $2", password_hash, user.id)
+        .execute(&state.db_pool)
+        .await
+    {
+        Ok(_) => Json(serde_json::json!({
+            "message": "Password successfully reset",
+            "success": true
+        })),
+        Err(_) => Json(serde_json::json!({
+            "error": "Failed to update password"
+        }))
+    }
+}  

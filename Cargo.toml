@@ -35,8 +35,15 @@ validator = { version = "0.16", features = ["derive"] }
 url = { version = "2.4", features = ["serde"] }
 envy = "0.4"
 
-sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls", "postgres", "uuid", "chrono"] }
+sqlx = { version = "0.7", features = [
+    "runtime-tokio",
+    "tls-native-tls",
+    "postgres",
+    "uuid",
+    "chrono",
+] }
 uuid = { version = "1.6", features = ["serde", "v4"] }
+rand = "0.8"
 argon2 = "0.5"
 jsonwebtoken = "9.2"
 thiserror = "1.0"
@@ -54,9 +61,22 @@ hyper-rustls = { version = "0.27.7", features = ["http2"] }
 tokio-stream = "0.1.17"
 
 # Performance optimization dependencies
-redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "script"] }
+redis = { version = "0.24", features = [
+    "tokio-comp",
+    "connection-manager",
+    "script",
+] }
 moka = { version = "0.12", features = ["future"] }
 metrics = "0.22"
 metrics-prometheus = "0.6"
 bb8-redis = "0.14"
 indexmap = "2.11.1"
+
+# Email dependencies
+lettre = { version = "0.11", default-features = false, features = [
+    "tokio1",
+    "tokio1-rustls-tls",
+    "smtp-transport",
+    "builder",
+    "hostname",
+] }

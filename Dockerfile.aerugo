@@ -80,6 +80,26 @@ RUN chown -R aerugo:aerugo /app /usr/local/bin/aerugo
 USER aerugo
 EXPOSE 8080 5173
 
+# Set default environment variables
+ENV LISTEN_ADDRESS="0.0.0.0:8080"
+ENV LOG_LEVEL="info"
+ENV S3_ENDPOINT="http://host.docker.internal:9001"
+ENV S3_BUCKET="aerugo-registry"
+ENV S3_ACCESS_KEY="minioadmin"
+ENV S3_SECRET_KEY="minioadmin"
+ENV S3_REGION="us-east-1"
+ENV REDIS_URL="redis://host.docker.internal:6379"
+ENV JWT_SECRET="your-jwt-secret-change-in-production"
+ENV API_PREFIX="/api/v1"
+ENV S3_USE_PATH_STYLE="true"
+ENV DATABASE_REQUIRE_SSL="false"
+ENV DATABASE_MIN_CONNECTIONS="5"
+ENV DATABASE_MAX_CONNECTIONS="20"
+ENV REDIS_POOL_SIZE="10"
+ENV REDIS_TTL_SECONDS="3600"
+ENV JWT_EXPIRATION_SECONDS="3600"
+ENV REFRESH_TOKEN_EXPIRATION_SECONDS="604800"
+
 # Note: DATABASE_URL should be provided when running the container
 # Example: docker run -e DATABASE_URL="your_database_url" aerugo:latest
 
@@ -87,4 +107,5 @@ EXPOSE 8080 5173
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/docs || exit 1
 
-CMD ["./start.sh"]
+CMD ["/start.sh"]
+ 

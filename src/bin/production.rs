@@ -119,6 +119,13 @@ async fn main() -> anyhow::Result<()> {
 
     info!("✅ S3 storage initialized - bucket: {}", settings.storage.bucket_name());
 
+    // Initialize email service for production
+    let email_service = Arc::new(
+        aerugo::email::EmailService::new(settings.email.clone())
+            .context("Failed to initialize email service")?
+    );
+    info!("📧 Email service initialized for production");
+
     // Create application state with production optimizations
     let app_state = AppState {
         db_pool: database_pool,
@@ -126,6 +133,7 @@ async fn main() -> anyhow::Result<()> {
         cache: Some(Arc::new(cache)),
         storage,
         manifest_cache: Arc::new(RwLock::new(HashMap::new())),
+        email_service,
     };
 
     // Create Axum application with optimized routes

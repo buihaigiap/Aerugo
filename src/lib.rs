@@ -13,6 +13,7 @@ pub mod cache;
 pub mod config;
 pub mod database;
 pub mod db;
+pub mod email;
 pub mod handlers;
 pub mod models;
 pub mod openapi;
@@ -26,6 +27,7 @@ pub struct AppState {
     pub storage: Arc<dyn storage::Storage>,
     pub cache: Option<Arc<cache::RegistryCache>>,
     pub manifest_cache: Arc<RwLock<HashMap<String, String>>>, // digest -> content
+    pub email_service: Arc<email::EmailService>,
 }
 
 // Handler for serving index.html (SPA entry point)
