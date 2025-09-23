@@ -34,9 +34,10 @@ pub struct AppState {
 async fn serve_spa() -> Result<Html<String>, StatusCode> {
     // Try different locations for the frontend
     let paths = [
-        "app/Fe-AI-Decenter/dist/index.html",  // Docker container path
-        "dist/static/index.html",             // Local dev path
-        "app/Fe-AI-Decenter/index.html",     // Fallback
+        "Fe-AI-Decenter/dist/index.html",     // Docker container path
+        "app/Fe-AI-Decenter/dist/index.html", // Local dev path
+        "dist/static/index.html",             // Alternative dev path
+        "Fe-AI-Decenter/index.html",         // Fallback
     ];
     
     for path in paths {
@@ -45,30 +46,8 @@ async fn serve_spa() -> Result<Html<String>, StatusCode> {
         }
     }
     
-    // If no frontend found, show fallback
-    Ok(Html(r#"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Aerugo Registry</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: system-ui; padding: 2rem; text-align: center; }
-        code { background: #f5f5f5; padding: 0.2rem 0.4rem; border-radius: 3px; }
-    </style>
-</head>
-<body>
-    <div id="root">
-        <h1>🚀 Aerugo Container Registry</h1>
-        <p>Frontend not built yet. Please run:</p>
-        <code>./build-frontend.sh</code>
-        <br><br>
-        <p><a href="/docs">📖 API Documentation</a></p>
-    </div>
-</body>
-</html>
-        "#.to_string()))
+    // If no frontend found, return 404
+    Err(StatusCode::NOT_FOUND)
 }
 
 // Fallback handler for SPA routes
@@ -104,8 +83,8 @@ pub async fn create_app(state: AppState) -> Router {
 
     // Static files and SPA
     let static_router = Router::new()
-        .nest_service("/assets", ServeDir::new("dist/static/assets"))
-        .route_service("/favicon.ico", ServeFile::new("dist/static/favicon.ico"))
+        .nest_service("/assets", ServeDir::new("app/Fe-AI-Decenter/dist/assets"))
+        .route_service("/favicon.ico", ServeFile::new("app/Fe-AI-Decenter/dist/favicon.ico"))
         .route("/", get(serve_spa))
         .fallback(spa_fallback);
 

@@ -69,6 +69,7 @@ impl Modify for SecurityAddon {
         repositories::create_repository,
         repositories::list_repositories,
         repositories::list_repositories_by_namespace,
+        repositories::list_public_repositories,
         repositories::get_repository,
         repositories::delete_repository,
 

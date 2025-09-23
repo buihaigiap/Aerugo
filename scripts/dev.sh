@@ -31,14 +31,14 @@ parse_env_vars() {
         POSTGRES_DB="${BASH_REMATCH[5]}"
     fi
 
-    # Parse REDIS_URL to extract port
-    if [[ "$REDIS_URL" =~ redis://([^:]+):([0-9]+) ]]; then
-        REDIS_HOST="${BASH_REMATCH[1]}"
-        REDIS_PORT="${BASH_REMATCH[2]}"
+    # Parse CACHE_REDIS_URL to extract port
+    if [[ "$CACHE_REDIS_URL" =~ redis://([^:]+):([^@]+)@([^:]+):([0-9]+) ]]; then
+        REDIS_HOST="${BASH_REMATCH[3]}"
+        REDIS_PORT="${BASH_REMATCH[4]}"
     fi
 
     # Parse S3 configuration
-    if [[ "$S3_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
+    if [[ "$STORAGE_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
         MINIO_HOST="${BASH_REMATCH[1]}"
         MINIO_PORT="${BASH_REMATCH[2]}"
     fi

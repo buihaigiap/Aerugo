@@ -18,14 +18,14 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Start frontend development server in debug mode
-    #[cfg(debug_assertions)]
-    start_frontend_dev_server();
+    // Disabled to serve static files via backend instead
+    // #[cfg(debug_assertions)]
+    // start_frontend_dev_server();
 
     println!("🚀 Starting Aerugo Container Registry");
     if cfg!(debug_assertions) {
         println!("🔧 Development Mode");
-        println!("🔗 Backend API: http://localhost:8080");
-        println!("🔗 Frontend Dev: http://localhost:5173");
+        println!("🔗 Full Application: http://localhost:8080");
         println!("🔗 API Docs: http://localhost:8080/docs");
     } else {
         println!("🏭 Production Mode");  

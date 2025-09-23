@@ -731,3 +731,96 @@ pub async fn get_repository(
         "org_permissions": org_permissions
     }))).into_response()
 }
+
+/// List public repositories (is_public = true) - No authentication required
+#[utoipa::path(
+    get,
+    path = "/api/v1/repos/repositories/public",
+    params(
+        ("namespace" = Option<String>, Query, description = "Filter by organization namespace")
+    ),
+    responses(
+        (status = 200, description = "Public repositories retrieved successfully", body = Vec<RepositoryResponse>),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "repositories",
+    security()
+)]
+pub async fn list_public_repositories(
+    State(state): State<AppState>,
+    Query(query): Query<ListRepositoriesQuery>,
+) -> Response {
+    let repositories = if let Some(namespace) = &query.namespace {
+        // Filter by organization namespace and is_public = true
+        match sqlx::query_as::<_, RepositoryWithOrgRow>(
+            r#"
+            SELECT 
+                r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+                o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+            FROM repositories r
+            JOIN organizations o ON r.organization_id = o.id
+            WHERE r.is_public = true
+            AND o.name = $1
+            ORDER BY r.created_at DESC
+            "#
+        )
+        .bind(namespace)
+        .fetch_all(&state.db_pool)
+        .await {
+            Ok(repos) => repos,
+            Err(e) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": format!("Database error: {}", e)
+                }))).into_response()
+            }
+        }
+    } else {
+        // Get all public repositories (is_public = true)
+        match sqlx::query_as::<_, RepositoryWithOrgRow>(
+            r#"
+            SELECT 
+                r.id, r.organization_id, r.name, r.description, r.is_public, r.created_by, r.created_at, r.updated_at,
+                o.id as org_id, o.name as org_name, o.display_name as org_display_name, o.description as org_description, o.website_url as org_website_url
+            FROM repositories r
+            JOIN organizations o ON r.organization_id = o.id
+            WHERE r.is_public = true
+            ORDER BY r.created_at DESC
+            "#
+        )
+        .fetch_all(&state.db_pool)
+        .await {
+            Ok(repos) => repos,
+            Err(e) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": format!("Database error: {}", e)
+                }))).into_response()
+            }
+        }
+    };
+
+    let response_repositories: Vec<RepositoryResponse> = repositories
+        .into_iter()
+        .map(|repo| RepositoryResponse {
+            id: repo.id,
+            organization_id: repo.organization_id,
+            name: repo.name,
+            description: repo.description,
+            is_public: repo.is_public,
+            created_by: repo.created_by,
+            created_at: repo.created_at,
+            updated_at: repo.updated_at,
+            organization: OrganizationInfo {
+                id: repo.org_id,
+                name: repo.org_name,
+                display_name: Some(repo.org_display_name),
+                description: repo.org_description,
+                website_url: repo.org_website_url,
+            },
+        })
+        .collect();
+
+    (StatusCode::OK, Json(json!({
+        "repositories": response_repositories,
+        "total": response_repositories.len()
+    }))).into_response()
+}

@@ -41,21 +41,21 @@ parse_env_vars() {
         exit 1
     fi
 
-    # Parse REDIS_URL to extract port
-    if [[ "$REDIS_URL" =~ redis://([^:]+):([0-9]+) ]]; then
-        REDIS_HOST="${BASH_REMATCH[1]}"
-        REDIS_PORT="${BASH_REMATCH[2]}"
+    # Parse CACHE_REDIS_URL to extract port
+    if [[ "$CACHE_REDIS_URL" =~ redis://([^:]+):([^@]+)@([^:]+):([0-9]+) ]]; then
+        REDIS_HOST="${BASH_REMATCH[3]}"
+        REDIS_PORT="${BASH_REMATCH[4]}"
     else
-        print_error "Invalid REDIS_URL format in .env file"
+        print_error "Invalid CACHE_REDIS_URL format in .env file"
         exit 1
     fi
 
     # Parse S3 configuration
-    if [[ "$S3_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
+    if [[ "$STORAGE_ENDPOINT" =~ http://([^:]+):([0-9]+) ]]; then
         MINIO_HOST="${BASH_REMATCH[1]}"
         MINIO_PORT="${BASH_REMATCH[2]}"
     else
-        print_error "Invalid S3_ENDPOINT format in .env file"
+        print_error "Invalid STORAGE_ENDPOINT format in .env file"
         exit 1
     fi
 
