@@ -1,13 +1,12 @@
-// Fix: Replaced incorrect file content with proper type definitions.
 export enum AuthMode {
-  Login = 'login',
-  Register = 'register',
+  Login = "login",
+  Register = "register",
 }
 
 export enum OrganizationRole {
-  Owner = 'Owner',
-  Admin = 'Admin',
-  Member = 'Member',
+  Owner = "Owner",
+  Admin = "Admin",
+  Member = "Member",
 }
 
 export interface User {
@@ -26,8 +25,9 @@ export interface ForgotPasswordRequest {
   email: string;
 }
 
-export interface ResetPasswordRequest {
-  token: string;
+export interface VerifyOptRequest {
+  email: string;
+  otp_code: string;
   new_password: string;
   confirm_password: string;
 }
@@ -84,7 +84,7 @@ export interface Repository {
 }
 
 export interface CreateRepositoryRequest {
-  name:string;
+  name: string;
   description: string | null;
   is_public: boolean;
 }
@@ -106,7 +106,6 @@ export interface ImageConfig {
   labels: Record<string, string>;
 }
 
-
 export interface ImageTag {
   name: string;
   digest: string;
@@ -119,12 +118,19 @@ export interface ImageTag {
   history: ImageHistoryItem[];
 }
 
-export interface Webhook {
-  id: number;
-  url: string;
-  events: string[];
-  lastDelivery?: {
-    status: 'success' | 'failed';
-    timestamp: string;
-  };
+export interface UserPermission {
+  user_id: number;
+  permission: string;
+}
+
+export interface OrgPermission {
+  organization_id: number;
+  permission: string;
+}
+
+export interface RepositoryDetailsResponse {
+  repository: Repository;
+  tags: ImageTag[];
+  user_permissions: UserPermission[];
+  org_permissions: OrgPermission[];
 }
