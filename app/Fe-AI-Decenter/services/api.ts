@@ -2,7 +2,7 @@ import { API_BASE_URL } from "../config";
 import {
   Organization,
   Repository,
-  VerifyOptRequest,
+  VerifyOtpRequest,
   CreateOrganizationRequest,
   UpdateOrganizationRequest,
   OrganizationMember,
@@ -14,12 +14,10 @@ import {
   ForgotPasswordRequest,
 } from "../types";
 
-// Interface to match the structure of the API response for organizations
 interface OrganizationsApiResponse {
   organizations: Organization[];
 }
 
-// Interface for a single organization API response
 interface OrganizationDetailsApiResponse {
   organization: Organization;
 }
@@ -28,7 +26,6 @@ interface OrganizationMembersApiResponse {
   members: OrganizationMember[];
 }
 
-// Interface for repositories API response
 interface RepositoriesApiResponse {
   repositories: Repository[];
 }
@@ -75,7 +72,6 @@ async function fetchWithAuth<T>(
     );
   }
 
-  // Handle cases with no response body (e.g., 204 No Content)
   if (response.status === 204) {
     return null as T;
   }
@@ -83,7 +79,6 @@ async function fetchWithAuth<T>(
   return response.json() as Promise<T>;
 }
 
-// Placeholder for public fetch calls (no auth token needed)
 async function fetchPublic<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -140,8 +135,8 @@ export const forgotPassword = (data: ForgotPasswordRequest): Promise<void> => {
   });
 };
 
-export const VerifyOptAndResetPassword = (
-  data: VerifyOptRequest
+export const VerifyOtpAndResetPassword = (
+  data: VerifyOtpRequest
 ): Promise<void> => {
   return fetchPublic<void>("/api/v1/auth/verify-otp", {
     method: "POST",
@@ -246,7 +241,6 @@ export const fetchOrganizationMembers = async (
   orgId: number,
   token: string
 ): Promise<OrganizationMember[]> => {
-  // The API returns an object { members: [...] }, so we extract the array.
   const data = await fetchWithAuth<OrganizationMembersApiResponse>(
     `/api/v1/organizations/${orgId}/members`,
     token

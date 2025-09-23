@@ -25,7 +25,7 @@ export interface ForgotPasswordRequest {
   email: string;
 }
 
-export interface VerifyOptRequest {
+export interface VerifyOtpRequest {
   email: string;
   otp_code: string;
   new_password: string;

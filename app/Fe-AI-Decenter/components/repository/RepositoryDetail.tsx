@@ -30,11 +30,11 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
   const repositoryPath = `${REGISTRY_HOST}/${organizationName}/${repository.name}`;
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 animate-fade-in">
+    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 animate-fade-in-up">
       <header className="mb-6">
         <button
           onClick={onBack}
-          className="flex items-center text-sm text-blue-400 hover:text-blue-300 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1 -ml-1"
+          className="flex items-center text-sm text-indigo-400 hover:text-indigo-300 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md p-1 -ml-1"
         >
           <ArrowLeftIcon className="w-4 h-4 mr-2" />
           Back to repositories
@@ -122,7 +122,6 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
   );
 };
 
-// Internal tab button component for styling
 const TabButton: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -131,9 +130,9 @@ const TabButton: React.FC<{
 }> = ({ icon, label, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex items-center px-2 sm:px-3 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800 rounded-t-md ${
+    className={`flex items-center px-2 sm:px-3 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 rounded-t-md ${
       isActive
-        ? "border-blue-500 text-blue-400"
+        ? "border-indigo-500 text-indigo-400"
         : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500"
     }`}
   >

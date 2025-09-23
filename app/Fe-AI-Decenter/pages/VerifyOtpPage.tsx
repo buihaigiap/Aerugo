@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AerugoIcon } from "../components/icons/DockerIcon";
 import Input from "../components/Input";
 import Button from "../components/Button";
-import { VerifyOptAndResetPassword } from "../services/api";
+import { VerifyOtpAndResetPassword } from "../services/api";
 
 const VerifyOtpPage: React.FC = () => {
   const location = useLocation();
@@ -42,7 +42,7 @@ const VerifyOtpPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await VerifyOptAndResetPassword({
+      await VerifyOtpAndResetPassword({
         email,
         otp_code: otpCode,
         new_password: newPassword,

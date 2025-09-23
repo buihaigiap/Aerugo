@@ -27,7 +27,6 @@ const App: React.FC = () => {
           setToken(storedToken);
           setCurrentUser(user);
         } catch (error) {
-          // Invalid token, clear it
           localStorage.removeItem("authToken");
           setToken(null);
           setCurrentUser(null);
@@ -50,7 +49,7 @@ const App: React.FC = () => {
       setCurrentUser(user);
     } catch (error) {
       console.error("Failed to fetch current user after login", error);
-      handleLogout(); // Log out if user fetch fails
+      handleLogout();
     } finally {
       setIsLoadingUser(false);
     }
@@ -60,7 +59,6 @@ const App: React.FC = () => {
     localStorage.removeItem("authToken");
     setToken(null);
     setCurrentUser(null);
-    // The navigation to the login page will be handled by the protected route logic.
   };
 
   if (isLoadingUser) {

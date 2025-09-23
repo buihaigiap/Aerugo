@@ -19,7 +19,6 @@ const RepositoryTagDetail: React.FC<RepositoryTagDetailProps> = ({ tag, reposito
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  // Pull command with specific digest for reproducibility
   const pullCommand = `docker pull ${repositoryPath}@${tag.digest}`;
 
   const handleCopy = () => {
@@ -35,11 +34,10 @@ const RepositoryTagDetail: React.FC<RepositoryTagDetailProps> = ({ tag, reposito
   
   const handleDelete = () => {
     setIsDeleting(true);
-    // Simulate API call
     setTimeout(() => {
         setIsDeleting(false);
         setIsDeleteModalOpen(false);
-        onBack(); // Go back to list after "deletion"
+        onBack();
     }, 1500);
   };
 

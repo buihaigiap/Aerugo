@@ -17,8 +17,6 @@ const DocsPage: React.FC = () => {
     const location = useLocation();
 
     useEffect(() => {
-        // Handle scrolling to the correct section when the hash in the URL changes.
-        // This is needed for links from other pages (e.g., footer) to work correctly.
         if (location.hash) {
             const id = location.hash.substring(1);
             setTimeout(() => {
@@ -29,7 +27,7 @@ const DocsPage: React.FC = () => {
                         block: 'start'
                     });
                 }
-            }, 100); // Small delay to ensure the page has rendered
+            }, 100);
         }
     }, [location.hash]);
 
@@ -42,7 +40,6 @@ const DocsPage: React.FC = () => {
                 behavior: 'smooth',
                 block: 'start'
             });
-            // Update the URL hash without reloading the page
             window.history.pushState(null, '', targetId);
         }
     };
