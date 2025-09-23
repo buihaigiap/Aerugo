@@ -34,16 +34,13 @@ async fn main() -> Result<()> {
     }
     println!();
 
-    // Initialize database connection
-    println!("Initializing database connection...");
-    let db_pool = sqlx::postgres::PgPool::connect(&settings.database.url())
+    // Initialize database connection and run migrations
+    println!("Initializing database connection and running migrations...");
+    let db_pool = aerugo::db::create_pool(&settings)
         .await
-        .context("Failed to connect to database")?;
-
-    // Skip migrations for now and create table manually
-    println!("⚠️  Skipping database migrations due to modified migration conflicts");
+        .context("Failed to create database pool and run migrations")?;
     
-    println!("Database connection and table setup completed successfully");
+    println!("Database connection and migrations completed successfully");
 
     // Initialize S3 storage
     println!("Initializing S3 storage...");
