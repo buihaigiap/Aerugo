@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
 
     // Create shared application state
     let state = AppState {
-        db_pool,
+        db_pool: db_pool.clone(),
         config: settings.clone(),
         storage,
         cache,
@@ -120,6 +120,19 @@ async fn main() -> Result<()> {
         email_service,
     };
     println!("Application state created successfully");
+
+    // Start background task to cleanup expired API keys
+    let cleanup_db_pool = db_pool.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Run every hour
+        loop {
+            interval.tick().await;
+            if let Err(e) = aerugo::handlers::auth::cleanup_expired_api_keys(&cleanup_db_pool).await {
+                tracing::error!("Failed to cleanup expired API keys: {}", e);
+            }
+        }
+    });
+    println!("Background API key cleanup task started");
 
     // Create application using lib.rs
     let app = create_app(state).await;

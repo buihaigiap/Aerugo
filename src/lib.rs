@@ -30,6 +30,38 @@ pub struct AppState {
     pub email_service: Arc<email::EmailService>,
 }
 
+// Function to detect correct paths for static files
+fn detect_frontend_paths() -> (String, String) {
+    // Try different locations in order of preference
+    let asset_paths = [
+        "Fe-AI-Decenter/dist/assets",     // Docker container path
+        "app/Fe-AI-Decenter/dist/assets", // Local dev path
+        "dist/static/assets",             // Alternative build path
+    ];
+    
+    let favicon_paths = [
+        "Fe-AI-Decenter/dist/favicon.ico",     // Docker container path  
+        "app/Fe-AI-Decenter/dist/favicon.ico", // Local dev path
+        "dist/static/favicon.ico",             // Alternative build path
+    ];
+    
+    // Find first existing assets path
+    let assets_path = asset_paths
+        .iter()
+        .find(|path| std::path::Path::new(path).exists())
+        .unwrap_or(&asset_paths[1]) // Default to local dev path
+        .to_string();
+        
+    // Find first existing favicon path  
+    let favicon_path = favicon_paths
+        .iter()
+        .find(|path| std::path::Path::new(path).exists())
+        .unwrap_or(&favicon_paths[1]) // Default to local dev path
+        .to_string();
+        
+    (assets_path, favicon_path)
+}
+
 // Handler for serving index.html (SPA entry point)
 async fn serve_spa() -> Result<Html<String>, StatusCode> {
     // Try different locations for the frontend
@@ -81,10 +113,13 @@ pub async fn create_app(state: AppState) -> Router {
         .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(state);
 
+    // Detect the correct path for static files
+    let (assets_path, favicon_path) = detect_frontend_paths();
+    
     // Static files and SPA
     let static_router = Router::new()
-        .nest_service("/assets", ServeDir::new("app/Fe-AI-Decenter/dist/assets"))
-        .route_service("/favicon.ico", ServeFile::new("app/Fe-AI-Decenter/dist/favicon.ico"))
+        .nest_service("/assets", ServeDir::new(assets_path))
+        .route_service("/favicon.ico", ServeFile::new(favicon_path))
         .route("/", get(serve_spa))
         .fallback(spa_fallback);
 

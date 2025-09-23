@@ -36,11 +36,12 @@
 |---------|--------|-------------|
 | Configuration System | ✅ Complete | Environment variables, config files, validation |
 | Database Layer | ✅ Complete | Schema design, migrations, models, and query functionality |
-| Authentication | ✅ Complete | JWT tokens, login/registration, permissions system |
+| Authentication | ✅ Complete | JWT tokens, API keys, login/registration, permissions system |
 | User Management | ✅ Complete | User profiles, password management, search |
 | Organization Management | ✅ Complete | Create/update/delete orgs, member management |
 | Repository Management | ✅ Complete | Create/update/delete repos, access control |
-| **Docker Authentication** | ✅ **NEW!** | **JWT & Basic auth, permission-based access** |
+| **API Key Authentication** | ✅ **NEW!** | **Hỗ trợ API key song song JWT, dual authentication** |
+| **Docker Authentication** | ✅ **Complete** | **JWT & Basic auth, permission-based access** |
 | Registry API | 🔄 In Progress | Docker Registry V2 API implementation |
 | S3 Storage Integration | 🔄 In Progress | Integration with S3-compatible storage |
 | Cache System | 📝 Planned | Redis-based caching for performance |
@@ -114,7 +115,71 @@ The `./scripts/dev.sh` script provides everything you need:
 ### API Documentation
 The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
 
-## 🔐 Docker Authentication
+## 🔐 API Key Authentication (Tiếng Việt)
+
+Aerugo bây giờ hỗ trợ **hệ thống API key song song với JWT authentication**, cho phép bạn có thể sử dụng cả hai phương pháp xác thực:
+
+### Cách hoạt động của API Key
+
+1. **Format API Key**: API key có format `ak_<32_ký_tự_ngẫu_nhiên>` (ví dụ: `ak_1234567890abcdef1234567890abcdef`)
+2. **Lưu trữ bảo mật**: API key được hash bằng SHA-256 trước khi lưu vào database
+3. **Các cách sử dụng**:
+   - **Header Authorization**: `Authorization: Bearer ak_your_api_key_here`
+   - **Header X-API-Key**: `X-API-Key: ak_your_api_key_here`
+4. **Fallback thông minh**: Nếu không có API key hoặc API key không hợp lệ, hệ thống sẽ tự động thử JWT authentication
+
+### Database Schema cho API Keys (Simplified)
+
+```sql
+CREATE TABLE api_keys (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    key_hash VARCHAR(128) NOT NULL UNIQUE,      -- SHA-256 hash của API key
+    name VARCHAR(64) NOT NULL,                  -- Tên mô tả của key
+    expires_at TIMESTAMP,                       -- Thời gian hết hạn (optional)
+    last_used_at TIMESTAMP,                     -- Lần cuối sử dụng
+    is_active BOOLEAN DEFAULT true,             -- Trạng thái kích hoạt
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Ví dụ sử dụng API Key
+
+```bash
+# Sử dụng với Authorization header
+curl -H "Authorization: Bearer ak_1234567890abcdef1234567890abcdef" \
+     https://your-aerugo.com/api/v1/repos/repositories
+
+# Sử dụng với X-API-Key header  
+curl -H "X-API-Key: ak_1234567890abcdef1234567890abcdef" \
+     https://your-aerugo.com/api/v1/organizations
+
+# JWT vẫn hoạt động bình thường
+curl -H "Authorization: Bearer <jwt_token>" \
+     https://your-aerugo.com/api/v1/repos/repositories
+```
+
+### Ưu điểm của API Key (Simplified)
+
+- **Dễ sử dụng**: Không cần refresh token như JWT
+- **Bảo mật tốt**: Hash SHA-256, có thể set thời gian hết hạn
+- **Cache performance**: API key được cache để tối ưu hiệu suất
+- **Tương thích hoàn toàn**: JWT authentication vẫn hoạt động bình thường
+- **Không có conflict**: Hai hệ thống hoạt động song song, không xung đột
+- **Full quyền**: API key có toàn quyền như JWT, không cần phân quyền phức tạp
+
+### Các API endpoints được hỗ trợ
+
+API key hiện tại hỗ trợ tất cả các protected endpoints:
+- ✅ **Authentication APIs**: `/api/v1/auth/*` (trừ login/register)
+- ✅ **Organizations APIs**: `/api/v1/organizations/*`
+- ✅ **Repositories APIs**: `/api/v1/repos/*`
+- ✅ **Storage APIs**: `/api/v1/storage/*` (nếu được protected)
+
+---
+
+## 🔐 Authentication System
 
 Aerugo now supports full Docker Registry V2 authentication! All push/pull operations require proper authentication.
 
