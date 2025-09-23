@@ -20,7 +20,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    
+
     if (!username || !email || !password || !confirmPassword) {
       setError('Please fill in all fields.');
       return;
@@ -30,7 +30,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
       setError('Passwords do not match.');
       return;
     }
-    
+
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
       return;
@@ -39,7 +39,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
