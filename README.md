@@ -36,11 +36,12 @@
 |---------|--------|-------------|
 | Configuration System | ✅ Complete | Environment variables, config files, validation |
 | Database Layer | ✅ Complete | Schema design, migrations, models, and query functionality |
-| Authentication | ✅ Complete | JWT tokens, login/registration, permissions system |
+| Authentication | ✅ Complete | JWT tokens, API keys, login/registration, permissions system |
 | User Management | ✅ Complete | User profiles, password management, search |
 | Organization Management | ✅ Complete | Create/update/delete orgs, member management |
 | Repository Management | ✅ Complete | Create/update/delete repos, access control |
-| **Docker Authentication** | ✅ **NEW!** | **JWT & Basic auth, permission-based access** |
+| **API Key Authentication** | ✅ **NEW!** | **API key support alongside JWT, dual authentication** |
+| **Docker Authentication** | ✅ **Complete** | **JWT & Basic auth, permission-based access** |
 | Registry API | 🔄 In Progress | Docker Registry V2 API implementation |
 | S3 Storage Integration | 🔄 In Progress | Integration with S3-compatible storage |
 | Cache System | 📝 Planned | Redis-based caching for performance |
@@ -114,7 +115,71 @@ The `./scripts/dev.sh` script provides everything you need:
 ### API Documentation
 The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
 
-## 🔐 Docker Authentication
+## 🔐 API Key Authentication
+
+Aerugo now supports **API key system alongside JWT authentication**, allowing you to use both authentication methods:
+
+### How API Key Works
+
+1. **API Key Format**: API key has format `ak_<32_random_characters>` (example: `ak_1234567890abcdef1234567890abcdef`)
+2. **Secure Storage**: API key is hashed with SHA-256 before storing in database
+3. **Usage Methods**:
+   - **Authorization Header**: `Authorization: Bearer ak_your_api_key_here`
+   - **X-API-Key Header**: `X-API-Key: ak_your_api_key_here`
+4. **Smart Fallback**: If no API key or invalid API key, the system will automatically try JWT authentication
+
+### Database Schema for API Keys (Simplified)
+
+```sql
+CREATE TABLE api_keys (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    key_hash VARCHAR(128) NOT NULL UNIQUE,      -- SHA-256 hash of API key
+    name VARCHAR(64) NOT NULL,                  -- Descriptive name of key
+    expires_at TIMESTAMP,                       -- Expiration time (optional)
+    last_used_at TIMESTAMP,                     -- Last used time
+    is_active BOOLEAN DEFAULT true,             -- Activation status
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### API Key Usage Examples
+
+```bash
+# Using with Authorization header
+curl -H "Authorization: Bearer ak_1234567890abcdef1234567890abcdef" \
+     https://your-aerugo.com/api/v1/repos/repositories
+
+# Using with X-API-Key header  
+curl -H "X-API-Key: ak_1234567890abcdef1234567890abcdef" \
+     https://your-aerugo.com/api/v1/organizations
+
+# JWT still works normally
+curl -H "Authorization: Bearer <jwt_token>" \
+     https://your-aerugo.com/api/v1/repos/repositories
+```
+
+### Advantages of API Key (Simplified)
+
+- **Easy to Use**: No need for refresh token like JWT
+- **Good Security**: SHA-256 hash, can set expiration time
+- **Cache Performance**: API key is cached for performance optimization
+- **Fully Compatible**: JWT authentication still works normally
+- **No Conflicts**: Two systems work in parallel, no conflicts
+- **Full Permissions**: API key has full permissions like JWT, no complex authorization needed
+
+### Supported API Endpoints
+
+API key currently supports all protected endpoints:
+- ✅ **Authentication APIs**: `/api/v1/auth/*` (except login/register)
+- ✅ **Organizations APIs**: `/api/v1/organizations/*`
+- ✅ **Repositories APIs**: `/api/v1/repos/*`
+- ✅ **Storage APIs**: `/api/v1/storage/*` (if protected)
+
+---
+
+## 🔐 Authentication System
 
 Aerugo now supports full Docker Registry V2 authentication! All push/pull operations require proper authentication.
 
@@ -130,9 +195,20 @@ curl -X POST http://localhost:8080/auth/register \
      -d '{"username":"myuser","password":"mypass","email":"user@example.com"}'
 
 # 3. Login with Docker CLI
+# Method 1: Manual login
 docker login localhost:8080
 Username: myuser
 Password: mypass
+
+# Method 2: Automatic login with API key (recommended)
+# First create API key via web interface or API
+./scripts/docker-login.sh localhost:8080 myuser ak_your_api_key_here
+
+# Or use environment variables
+export DOCKER_REGISTRY_HOST=localhost:8080
+export DOCKER_USERNAME=myuser  
+export API_KEY=ak_your_api_key_here
+./scripts/docker-login.sh
 
 # 4. Now you can push/pull images!
 docker tag nginx:latest localhost:8080/myorg/nginx:latest
@@ -142,8 +218,9 @@ docker pull localhost:8080/myorg/nginx:latest
 
 ### Authentication Methods
 
-- **🔑 Basic Authentication**: For Docker CLI and container runtimes
+- **🔑 Basic Authentication**: For Docker CLI and container runtimes (username/password or username/api_key)
 - **🎫 JWT Bearer Tokens**: For web applications and API clients
+- **🔐 API Key Authentication**: Enhanced security for Docker login and API access
 - **🛡️ Permission-Based Access**: Pull, push, and delete permissions per repository
 - **👥 Organization-Level Control**: Team-based access management
 

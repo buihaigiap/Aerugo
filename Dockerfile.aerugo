@@ -19,11 +19,13 @@ ARG DATABASE_URL
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
+COPY .env ./.env
 
-# Copy and setup frontend for development
+# Copy and build frontend for production
 COPY app/Fe-AI-Decenter ./app/Fe-AI-Decenter
 RUN cd app/Fe-AI-Decenter && \
-    npm install
+    npm install && \
+    npm run build
 
 # Build the application
 # Use local DATABASE_URL for build, will be overridden at runtime
@@ -40,9 +42,10 @@ RUN echo "Setting up database for SQLX macros" && \
     sleep 10 && \
     su - postgres -c "psql -c \"\\l\"" && \
     su - postgres -c "psql -c \"SELECT version();\"" && \
-    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" cargo install sqlx-cli --no-default-features --features native-tls,postgres && \
-    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" sqlx migrate run && \
-    DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" cargo build --release --bin aerugo --verbose
+    export DATABASE_URL="postgresql://aerugo:development@localhost:5432/aerugo_dev" && \
+    cargo install sqlx-cli --no-default-features --features native-tls,postgres && \
+    sqlx migrate run && \
+    cargo build --release --bin aerugo --verbose
 
 # Runtime stage - use same base as builder for Node.js compatibility
 FROM rustlang/rust:nightly
@@ -60,8 +63,11 @@ COPY --from=builder /app/target/release/aerugo /usr/local/bin/aerugo
 # Copy migrations
 COPY --from=builder /app/migrations ./migrations
 
-# Copy frontend
-COPY --from=builder /app/app/Fe-AI-Decenter ./app/Fe-AI-Decenter
+# Copy environment file
+COPY --from=builder /app/.env ./.env
+
+# Copy frontend built files (static dist)
+COPY --from=builder /app/app/Fe-AI-Decenter/dist ./app/Fe-AI-Decenter/dist
 
 # Copy startup script
 COPY start.sh ./start.sh
@@ -78,7 +84,8 @@ WORKDIR /app
 RUN chown -R aerugo:aerugo /app /usr/local/bin/aerugo
 
 USER aerugo
-EXPOSE 8080 5173
+# Expose only port 8080 (frontend + backend on same port)
+EXPOSE 8080
 
 # Set default environment variables
 ENV LISTEN_ADDRESS="0.0.0.0:8080"
@@ -88,8 +95,8 @@ ENV S3_BUCKET="aerugo-registry"
 ENV S3_ACCESS_KEY="minioadmin"
 ENV S3_SECRET_KEY="minioadmin"
 ENV S3_REGION="us-east-1"
-ENV REDIS_URL="redis://host.docker.internal:6379"
-ENV JWT_SECRET="your-jwt-secret-change-in-production"
+ENV REDIS_URL="redis://host.docker.internal:6380"
+ENV JWT_SECRET="test-integration-secret-key-do-not-use-in-production"
 ENV API_PREFIX="/api/v1"
 ENV S3_USE_PATH_STYLE="true"
 ENV DATABASE_REQUIRE_SSL="false"
@@ -108,4 +115,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/docs || exit 1
 
 CMD ["/start.sh"]
- 

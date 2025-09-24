@@ -1,8 +1,8 @@
-// src/handlers/organizations.rs - Fixed version
+// src/handlers/organizations.rs - Fixed version with API key support
 use anyhow::{bail, Context, Result};
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, HeaderMap},
     response::IntoResponse,
     Json,
 };
@@ -13,7 +13,7 @@ use utoipa::ToSchema;
 use axum_extra::headers::{Authorization, authorization::Bearer};
 use axum_extra::TypedHeader;
 use secrecy::ExposeSecret;
-use crate::auth::extract_user_id;
+use crate::auth::{extract_user_id_dual, extract_user_id};
 
 use crate::{
     models::organizations::{
@@ -40,6 +40,7 @@ use crate::{
 )]
 pub async fn create_organization(
     State(state): State<AppState>,
+    headers: HeaderMap,
     auth: Option<TypedHeader<Authorization<Bearer>>>,
     Json(req): Json<CreateOrganizationRequest>,
 ) -> impl IntoResponse {
@@ -54,7 +55,16 @@ pub async fn create_organization(
         );
     }
 
-    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+    // Extract user ID from JWT or API key
+    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
+    
+    let user_id = match extract_user_id_dual(
+        auth, 
+        &headers, 
+        secret, 
+        &state.db_pool, 
+        state.cache.as_ref()
+    ).await {
         Ok(id) => id,
         Err(status) => {
             return (
@@ -153,6 +163,7 @@ pub async fn get_organization(
 )]
 pub async fn update_organization(
     State(state): State<AppState>,
+    headers: HeaderMap,
     auth: Option<TypedHeader<Authorization<Bearer>>>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateOrganizationRequest>,
@@ -167,7 +178,16 @@ pub async fn update_organization(
         );
     }
 
-    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+    // Extract user ID from JWT or API key
+    let secret = state.config.auth.jwt_secret.expose_secret().as_bytes();
+    
+    let user_id = match extract_user_id_dual(
+        auth, 
+        &headers, 
+        secret, 
+        &state.db_pool, 
+        state.cache.as_ref()
+    ).await {
         Ok(id) => id,
         Err(status) => {
             return (
