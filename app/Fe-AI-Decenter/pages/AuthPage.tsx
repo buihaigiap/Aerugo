@@ -42,14 +42,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-slate-100 font-sans overflow-x-hidden">
       {/* Header */}
       <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20 border-b border-slate-800/50">
-        <nav className="flex items-center justify-between">
+        <nav className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
           <div className="flex items-center space-x-3">
             <AerugoIcon className="w-8 h-8 text-indigo-400" />
             <span className="text-xl font-bold text-slate-50">
               Aerugo Registry
             </span>
           </div>
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center flex-wrap justify-center gap-x-4 gap-y-2 sm:gap-x-6">
             <button
               onClick={handleDocsClick}
               className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-2 py-1 transition-colors"

@@ -32,6 +32,11 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // State for members is now managed here instead of in MembersView
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
+  const [errorMembers, setErrorMembers] = useState<string | null>(null);
+
   const getDetails = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -46,14 +51,38 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({
     }
   }, [organization.id, token]);
 
+  const getMembers = useCallback(async () => {
+    setIsLoadingMembers(true);
+    setErrorMembers(null);
+    try {
+      const memberList = await fetchOrganizationMembers(organization.id, token);
+      setMembers(memberList);
+    } catch (err) {
+      setErrorMembers("Failed to load members.");
+      console.error(err);
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  }, [organization.id, token]);
+
   useEffect(() => {
     getDetails();
-  }, [getDetails]);
+    getMembers();
+  }, [getDetails, getMembers]);
 
   const handleSettingsChange = () => {
-    getDetails(); 
-    onDataChange();
+    getDetails(); // Re-fetch my own details
+    onDataChange(); // Tell parent to re-fetch the list
   };
+
+  const handleMembersChanged = () => {
+    getMembers(); // Only re-fetch members when a member is added/removed/updated
+  };
+
+  // Calculate the current user's role here to pass it to child components
+  const currentUserRole = members
+    .find((m) => m.user_id === currentUser.id)
+    ?.role.toLowerCase();
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg">
@@ -65,7 +94,10 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({
       </header>
 
       <div className="border-b border-slate-700">
-        <nav className="flex space-x-4 px-6" aria-label="Tabs">
+        <nav
+          className="flex space-x-4 px-4 sm:px-6 overflow-x-auto"
+          aria-label="Tabs"
+        >
           <TabButton
             icon={<UsersIcon className="w-5 h-5 mr-2" />}
             label="Members"
@@ -95,12 +127,18 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({
                 token={token}
                 organization={detailedOrg}
                 currentUser={currentUser}
+                members={members}
+                isLoading={isLoadingMembers}
+                error={errorMembers}
+                currentUserRole={currentUserRole}
+                onDataChange={handleMembersChanged}
               />
             )}
             {activeTab === "settings" && (
               <OrganizationSettings
                 token={token}
                 organization={detailedOrg}
+                currentUserRole={currentUserRole}
                 onOrganizationUpdated={handleSettingsChange}
                 onOrganizationDeleted={onDataChange}
               />
@@ -112,6 +150,7 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({
   );
 };
 
+// Internal tab button component for styling
 const TabButton: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -120,7 +159,7 @@ const TabButton: React.FC<{
 }> = ({ icon, label, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex items-center px-3 py-3 font-medium text-sm border-b-2 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 rounded-t-md ${
+    className={`flex items-center px-3 py-3 font-medium text-sm border-b-2 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 rounded-t-md whitespace-nowrap ${
       isActive
         ? "border-indigo-500 text-indigo-400"
         : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500"
@@ -131,42 +170,32 @@ const TabButton: React.FC<{
   </button>
 );
 
+// MembersView is now a simpler component that receives its data via props
 const MembersView: React.FC<{
   token: string;
   organization: Organization;
   currentUser: User;
-}> = ({ token, organization, currentUser }) => {
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  members: OrganizationMember[];
+  isLoading: boolean;
+  error: string | null;
+  currentUserRole?: string;
+  onDataChange: () => void;
+}> = ({
+  token,
+  organization,
+  currentUser,
+  members,
+  isLoading,
+  error,
+  currentUserRole,
+  onDataChange,
+}) => {
   const [showAddForm, setShowAddForm] = useState(false);
-
-  const getMembers = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const memberList = await fetchOrganizationMembers(organization.id, token);
-      setMembers(memberList);
-    } catch (err) {
-      setError("Failed to load members.");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organization.id, token]);
-
-  useEffect(() => {
-    getMembers();
-  }, [getMembers]);
 
   const handleSuccess = () => {
     setShowAddForm(false);
-    getMembers(); 
+    onDataChange(); // Refresh member list by calling the passed-in handler
   };
-
-  const currentUserRole = members
-    .find((m) => m.user_id === currentUser.id)
-    ?.role.toLowerCase();
 
   return (
     <div className="space-y-6">
@@ -201,7 +230,7 @@ const MembersView: React.FC<{
           currentUserRole={currentUserRole}
           orgId={organization.id}
           token={token}
-          onDataChange={getMembers}
+          onDataChange={onDataChange}
         />
       )}
     </div>

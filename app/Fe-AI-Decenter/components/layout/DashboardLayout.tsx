@@ -24,6 +24,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
     }`;
 
+  // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -41,14 +42,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       <header className="bg-slate-800/50 border-b border-slate-700 backdrop-blur-sm sticky top-0 z-10">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-4 lg:space-x-8">
+              <Link
+                to="/repositories"
+                className="flex items-center space-x-3 flex-shrink-0"
+              >
                 <AerugoIcon className="h-7 w-7 text-indigo-500" />
-                <h1 className="text-xl font-bold text-slate-50">
+                <h1 className="text-xl font-bold text-slate-50 hidden md:block">
                   Aerugo Registry
                 </h1>
-              </div>
-              <div className="flex items-center space-x-4">
+              </Link>
+              <div className="flex items-center space-x-2 sm:space-x-4">
                 <NavLink to="/repositories" className={navLinkClasses}>
                   Repositories
                 </NavLink>
@@ -103,7 +107,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </div>
         </nav>
       </header>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <Outlet />
       </main>
     </div>

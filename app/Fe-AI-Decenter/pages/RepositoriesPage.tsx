@@ -34,7 +34,10 @@ const RepositoriesPage: React.FC<RepositoriesPageProps> = ({ token }) => {
   }, [getOrganizations]);
 
   useEffect(() => {
+    // This effect handles maintaining a valid selection if the list of orgs changes.
+    // For example, if the currently selected organization is deleted.
     if (selectedOrgId && !organizations.some((o) => o.id === selectedOrgId)) {
+      // Fallback to the first organization in the list, or to "All" if no organizations are left.
       setSelectedOrgId(organizations.length > 0 ? organizations[0].id : null);
     }
   }, [organizations, selectedOrgId]);
@@ -43,7 +46,7 @@ const RepositoriesPage: React.FC<RepositoriesPageProps> = ({ token }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center px-4 sm:px-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-4 sm:px-0">
         <h1 className="text-3xl font-bold text-slate-50">Repositories</h1>
         <OrganizationSelector
           organizations={organizations}

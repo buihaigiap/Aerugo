@@ -37,6 +37,7 @@ const MemberListItem: React.FC<MemberListItemProps> = ({
     setIsUpdating(true);
     setError(null);
     try {
+      // The API requires the user's ID for updates, not the membership ID.
       await updateMemberRole(orgId, member.user_id, capitalizedRole, token);
       onDataChange();
     } catch (err) {
@@ -51,6 +52,7 @@ const MemberListItem: React.FC<MemberListItemProps> = ({
     setIsDeleting(true);
     setError(null);
     try {
+      // The API for deleting a member requires the user's ID, not the membership ID.
       await deleteMember(orgId, member.user_id, token);
       setIsDeleteModalOpen(false);
       onDataChange();
@@ -79,7 +81,7 @@ const MemberListItem: React.FC<MemberListItemProps> = ({
 
   return (
     <>
-      <li className="p-4 flex items-center justify-between">
+      <li className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex-1">
           <p className="text-md font-semibold text-slate-100">
             {member.username}
@@ -89,13 +91,13 @@ const MemberListItem: React.FC<MemberListItemProps> = ({
             <p className="text-xs text-red-500 mt-1">{error}</p>
           )}
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 w-full sm:w-auto justify-end">
           {canManage && !isSelf ? (
             <select
               value={member.role.toLowerCase()}
               onChange={handleRoleChange}
               disabled={isUpdating || isLastOwner}
-              className="block w-full px-3 py-1 bg-slate-700 border border-slate-600 rounded-md text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70"
+              className="block w-full max-w-[150px] px-3 py-1 bg-slate-700 border border-slate-600 rounded-md text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70"
             >
               <option value="owner" disabled={currentUserRole !== "owner"}>
                 Owner

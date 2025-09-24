@@ -37,7 +37,6 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      // Use the original repository name for fetching, as it's the identifier
       const response = await fetchRepositoryDetails(
         organizationName,
         repository.name,
@@ -159,7 +158,6 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
   );
 };
 
-// Internal tab button component for styling
 const TabButton: React.FC<{
   icon: React.ReactNode;
   label: string;

@@ -46,6 +46,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, token }) => {
       };
       await changePassword(payload, token);
       setSuccess("Password updated successfully!");
+      // Clear fields on success
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -98,13 +99,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, token }) => {
         </div>
         <div className="border-t border-slate-700">
           <dl className="divide-y divide-slate-700">
-            <div className="px-6 py-4 grid grid-cols-3 gap-4">
+            <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <dt className="text-sm font-medium text-slate-400">Username</dt>
               <dd className="mt-1 text-sm text-slate-100 col-span-2 sm:mt-0">
                 {currentUser.username}
               </dd>
             </div>
-            <div className="px-6 py-4 grid grid-cols-3 gap-4">
+            <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <dt className="text-sm font-medium text-slate-400">
                 Email address
               </dt>
@@ -112,7 +113,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, token }) => {
                 {currentUser.email}
               </dd>
             </div>
-            <div className="px-6 py-4 grid grid-cols-3 gap-4">
+            <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <dt className="text-sm font-medium text-slate-400">User ID</dt>
               <dd className="mt-1 text-sm text-slate-100 col-span-2 sm:mt-0">
                 {currentUser.id}
