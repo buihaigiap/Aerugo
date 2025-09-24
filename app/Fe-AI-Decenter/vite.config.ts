@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL)
+    },
     server: {
       host: env.VITE_HOST === 'true' || true, // Default true, có thể override bằng VITE_HOST
       port: parseInt(env.VITE_PORT || '5173'), // Default 5173, có thể override bằng VITE_PORT

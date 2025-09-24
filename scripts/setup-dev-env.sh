@@ -258,7 +258,7 @@ validate_env_file() {
     print_step "Validating .env file configuration..."
     
     # Check if required environment variables are set
-    required_vars=("DATABASE_URL" "REDIS_URL" "S3_ENDPOINT" "S3_BUCKET" "S3_ACCESS_KEY" "S3_SECRET_KEY")
+    required_vars=("DATABASE_URL" "CACHE_REDIS_URL" "STORAGE_ENDPOINT" "STORAGE_BUCKET" "STORAGE_ACCESS_KEY_ID" "STORAGE_SECRET_ACCESS_KEY")
     
     for var in "${required_vars[@]}"; do
         if [[ -z "${!var}" ]]; then
