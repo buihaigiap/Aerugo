@@ -30,13 +30,46 @@ pub struct AppState {
     pub email_service: Arc<email::EmailService>,
 }
 
+// Function to detect correct paths for static files
+fn detect_frontend_paths() -> (String, String) {
+    // Try different locations in order of preference
+    let asset_paths = [
+        "Fe-AI-Decenter/dist/assets",     // Docker container path
+        "app/Fe-AI-Decenter/dist/assets", // Local dev path
+        "dist/static/assets",             // Alternative build path
+    ];
+    
+    let favicon_paths = [
+        "Fe-AI-Decenter/dist/favicon.ico",     // Docker container path  
+        "app/Fe-AI-Decenter/dist/favicon.ico", // Local dev path
+        "dist/static/favicon.ico",             // Alternative build path
+    ];
+    
+    // Find first existing assets path
+    let assets_path = asset_paths
+        .iter()
+        .find(|path| std::path::Path::new(path).exists())
+        .unwrap_or(&asset_paths[1]) // Default to local dev path
+        .to_string();
+        
+    // Find first existing favicon path  
+    let favicon_path = favicon_paths
+        .iter()
+        .find(|path| std::path::Path::new(path).exists())
+        .unwrap_or(&favicon_paths[1]) // Default to local dev path
+        .to_string();
+        
+    (assets_path, favicon_path)
+}
+
 // Handler for serving index.html (SPA entry point)
 async fn serve_spa() -> Result<Html<String>, StatusCode> {
     // Try different locations for the frontend
     let paths = [
-        "app/Fe-AI-Decenter/dist/index.html",  // Docker container path
-        "dist/static/index.html",             // Local dev path
-        "app/Fe-AI-Decenter/index.html",     // Fallback
+        "Fe-AI-Decenter/dist/index.html",     // Docker container path
+        "app/Fe-AI-Decenter/dist/index.html", // Local dev path
+        "dist/static/index.html",             // Alternative dev path
+        "Fe-AI-Decenter/index.html",         // Fallback
     ];
     
     for path in paths {
@@ -45,30 +78,8 @@ async fn serve_spa() -> Result<Html<String>, StatusCode> {
         }
     }
     
-    // If no frontend found, show fallback
-    Ok(Html(r#"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Aerugo Registry</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: system-ui; padding: 2rem; text-align: center; }
-        code { background: #f5f5f5; padding: 0.2rem 0.4rem; border-radius: 3px; }
-    </style>
-</head>
-<body>
-    <div id="root">
-        <h1>🚀 Aerugo Container Registry</h1>
-        <p>Frontend not built yet. Please run:</p>
-        <code>./build-frontend.sh</code>
-        <br><br>
-        <p><a href="/docs">📖 API Documentation</a></p>
-    </div>
-</body>
-</html>
-        "#.to_string()))
+    // If no frontend found, return 404
+    Err(StatusCode::NOT_FOUND)
 }
 
 // Fallback handler for SPA routes
@@ -102,10 +113,13 @@ pub async fn create_app(state: AppState) -> Router {
         .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(state);
 
+    // Detect the correct path for static files
+    let (assets_path, favicon_path) = detect_frontend_paths();
+    
     // Static files and SPA
     let static_router = Router::new()
-        .nest_service("/assets", ServeDir::new("dist/static/assets"))
-        .route_service("/favicon.ico", ServeFile::new("dist/static/favicon.ico"))
+        .nest_service("/assets", ServeDir::new(assets_path))
+        .route_service("/favicon.ico", ServeFile::new(favicon_path))
         .route("/", get(serve_spa))
         .fallback(spa_fallback);
 

@@ -34,6 +34,12 @@ pub struct UserSessionCache {
     pub session_data: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyCacheEntry {
+    pub user_id: i64,
+    pub expires_at: Option<chrono::NaiveDateTime>,
+}
+
 /// Cache layer for Docker Registry operations
 #[derive(Clone)]
 pub struct RegistryCache {
@@ -51,6 +57,7 @@ struct MemoryCache {
     tag_cache: HashMap<String, CacheEntry<Vec<String>>>,
     // Authentication and permission caches
     auth_token_cache: HashMap<String, CacheEntry<AuthCacheEntry>>,
+    api_key_cache: HashMap<String, CacheEntry<String>>, // Store serialized ApiKeyCacheEntry
     permission_cache: HashMap<String, CacheEntry<PermissionCacheEntry>>,
     user_session_cache: HashMap<String, CacheEntry<UserSessionCache>>,
 }
@@ -968,6 +975,71 @@ impl RegistryCache {
         }
 
         Ok(())
+    }
+    
+    /// Cache API key information  
+    pub async fn cache_api_key_info(&self, key_hash: &str, api_key_entry: ApiKeyCacheEntry) -> Result<()> {
+        let cache_key = format!("api_key:{}", key_hash);
+        
+        // Memory cache - store serialized string for API keys
+        if self.config.enable_memory {
+            let mut cache = self.memory_cache.write().await;
+            let serialized = serde_json::to_string(&api_key_entry)?;
+            cache.api_key_cache.insert(
+                cache_key.clone(),
+                CacheEntry::new(serialized, self.config.auth_token_ttl),
+            );
+        }
+        
+        // Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                let serialized = serde_json::to_string(&api_key_entry)?;
+                let _: Result<(), _> = conn.set_ex(&cache_key, serialized, self.config.auth_token_ttl.as_secs());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get cached API key information
+    pub async fn get_api_key_info(&self, key_hash: &str) -> Option<ApiKeyCacheEntry> {
+        let cache_key = format!("api_key:{}", key_hash);
+        
+        // Try memory cache first
+        if self.config.enable_memory {
+            let cache = self.memory_cache.read().await;
+            if let Some(entry) = cache.api_key_cache.get(&cache_key) {
+                if !entry.is_expired() {
+                    // entry.data is already a String for API key cache
+                    if let Ok(api_key_entry) = serde_json::from_str::<ApiKeyCacheEntry>(&entry.data) {
+                        return Some(api_key_entry);
+                    }
+                }
+            }
+        }
+        
+        // Try Redis cache
+        if let Some(redis) = &self.redis_client {
+            if let Ok(mut conn) = redis.get_connection() {
+                if let Ok(data) = conn.get::<_, String>(&cache_key) {
+                    if let Ok(api_key_entry) = serde_json::from_str::<ApiKeyCacheEntry>(&data) {
+                        // Update memory cache
+                        if self.config.enable_memory {
+                            let mut cache = self.memory_cache.write().await;
+                            cache.api_key_cache.insert(
+                                cache_key,
+                                CacheEntry::new(data, self.config.auth_token_ttl),
+                            );
+                        }
+                        
+                        return Some(api_key_entry);
+                    }
+                }
+            }
+        }
+        
+        None
     }
 }
 
