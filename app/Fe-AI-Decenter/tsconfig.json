@@ -16,9 +16,11 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "include": ["src"],
+
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "exclude": ["node_modules", "dist"]
-  }
+    "noEmit": true
+  },
+
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }
