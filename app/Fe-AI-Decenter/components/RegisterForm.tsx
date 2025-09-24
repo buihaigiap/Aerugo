@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import Input from "./Input";
 import Button from "./Button";
-import { API_BASE_URL } from "../config";
+import { registerUser } from "../services/api";
 
 interface RegisterFormProps {
   onRegisterSuccess: () => void;
@@ -39,26 +39,17 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      if (response.status === 201) {
-        setSuccess("Registration successful! Please sign in.");
-        setTimeout(() => {
-          onRegisterSuccess();
-        }, 1500);
-      } else if (response.status === 409) {
+      await registerUser({ username, email, password });
+      setSuccess("Registration successful! Please sign in.");
+      setTimeout(() => {
+        onRegisterSuccess();
+      }, 1500);
+    } catch (err: any) {
+      if (err.status === 409) {
         setError("A user with that username or email already exists.");
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
-    } catch (err) {
-      setError("Failed to connect to the server. Please check your network.");
       console.error(err);
     } finally {
       setIsLoading(false);

@@ -140,7 +140,7 @@ const VerifyOtpPage: React.FC = () => {
                   to="/"
                   className="font-semibold text-indigo-400 hover:text-indigo-300"
                 >
-                  &larr; Back to Forgot Password
+                  Back to Forgot Password
                 </Link>
               </div>
             </>

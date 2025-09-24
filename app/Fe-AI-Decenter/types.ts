@@ -15,6 +15,12 @@ export interface User {
   email: string;
 }
 
+export interface AuthRequest {
+  username?: string;
+  email: string;
+  password: string;
+}
+
 export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
@@ -46,9 +52,9 @@ export interface Organization {
 export interface CreateOrganizationRequest {
   name: string;
   display_name: string;
-  description: string;
-  avatar_url?: string;
-  website_url?: string;
+  description: string | null;
+  avatar_url?: string | null;
+  website_url?: string | null;
 }
 
 export interface UpdateOrganizationRequest {
@@ -89,21 +95,10 @@ export interface CreateRepositoryRequest {
   is_public: boolean;
 }
 
-export interface ImageLayer {
-  digest: string;
-  size: string;
-}
-
-export interface ImageHistoryItem {
-  command: string;
-  details: string;
-}
-
-export interface ImageConfig {
-  created: string;
-  dockerVersion: string;
-  osArch: string;
-  labels: Record<string, string>;
+export interface UpdateRepositoryRequest {
+  name: string;
+  description: string | null;
+  is_public: boolean;
 }
 
 export interface ImageTag {
@@ -112,10 +107,6 @@ export interface ImageTag {
   osArch: string;
   size: string;
   pushedAt: string;
-  // Detailed information for the tag detail view
-  config: ImageConfig;
-  layers: ImageLayer[];
-  history: ImageHistoryItem[];
 }
 
 export interface UserPermission {
