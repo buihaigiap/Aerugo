@@ -192,12 +192,13 @@ pub async fn extract_user_from_auth(
 }
 
 /// Verify docker credentials (username/password) against database
+/// Also supports API key as password for enhanced security
 async fn verify_docker_credentials(
     username: &str,
     password: &str,
     state: &AppState,
 ) -> Result<Option<String>, sqlx::Error> {
-    // First try to authenticate as a user
+    // First try to authenticate as a user with regular password
     let user_result = sqlx::query!(
         "SELECT id, username, password_hash FROM users WHERE username = $1",
         username
@@ -237,6 +238,28 @@ async fn verify_docker_credentials(
             return Ok(Some(user.id.to_string()));
         } else {
             println!("❌ Invalid password for user: {}", username);
+        }
+
+        // If regular password failed, try API key authentication
+        // Check if the password looks like an API key (ak_<32_hex_chars>)
+        if password.starts_with("ak_") && password.len() == 35 {
+            println!("🔑 Attempting API key authentication for user: {}", username);
+            
+            // Use existing API key verification from auth module
+            match crate::auth::verify_api_key(password, &state.db_pool, state.cache.as_ref()).await {
+                Ok(api_user_id) => {
+                    // Verify that the API key belongs to the same user
+                    if api_user_id == user.id {
+                        println!("✅ Docker login successful with API key for user: {}", username);
+                        return Ok(Some(user.id.to_string()));
+                    } else {
+                        println!("❌ API key belongs to different user (id: {}) than requested user: {}", api_user_id, username);
+                    }
+                }
+                Err(e) => {
+                    println!("❌ API key verification failed: {:?}", e);
+                }
+            }
         }
     }
 

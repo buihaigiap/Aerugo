@@ -18,7 +18,7 @@ use crate::models::{
 };
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
 
-/// Security addon để thêm Bearer Auth vào OpenAPI
+/// Security addon to add Bearer Auth to OpenAPI
 pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {

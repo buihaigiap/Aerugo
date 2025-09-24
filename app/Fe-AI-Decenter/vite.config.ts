@@ -13,24 +13,21 @@ export default defineConfig(({ mode }) => {
     '127.0.0.1',
   ]
 
-  // Thêm host từ environment variable nếu có
+  // Add host from environment variable if available
   if (env.VITE_ALLOWED_HOST) {
     allowedHosts.push(env.VITE_ALLOWED_HOST)
   }
 
-  // Thêm domain pattern từ environment variable nếu có
+  // Add domain pattern from environment variable if available
   if (env.VITE_ALLOWED_DOMAIN_PATTERN) {
     allowedHosts.push(env.VITE_ALLOWED_DOMAIN_PATTERN)
   }
 
   return {
     plugins: [react(), tailwindcss()],
-    define: {
-      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL)
-    },
     server: {
-      host: env.VITE_HOST === 'true' || true, // Default true, có thể override bằng VITE_HOST
-      port: parseInt(env.VITE_PORT || '5173'), // Default 5173, có thể override bằng VITE_PORT
+      host: env.VITE_HOST === 'true' || true, // Default true, can be overridden by VITE_HOST
+      port: parseInt(env.VITE_PORT || '5173'), // Default 5173, can be overridden by VITE_PORT
       allowedHosts: allowedHosts
     }
   }

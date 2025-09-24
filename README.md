@@ -40,7 +40,7 @@
 | User Management | ✅ Complete | User profiles, password management, search |
 | Organization Management | ✅ Complete | Create/update/delete orgs, member management |
 | Repository Management | ✅ Complete | Create/update/delete repos, access control |
-| **API Key Authentication** | ✅ **NEW!** | **Hỗ trợ API key song song JWT, dual authentication** |
+| **API Key Authentication** | ✅ **NEW!** | **API key support alongside JWT, dual authentication** |
 | **Docker Authentication** | ✅ **Complete** | **JWT & Basic auth, permission-based access** |
 | Registry API | 🔄 In Progress | Docker Registry V2 API implementation |
 | S3 Storage Integration | 🔄 In Progress | Integration with S3-compatible storage |
@@ -115,67 +115,67 @@ The `./scripts/dev.sh` script provides everything you need:
 ### API Documentation
 The API documentation is available at `http://localhost:8080/api/docs` when the server is running.
 
-## 🔐 API Key Authentication (Tiếng Việt)
+## 🔐 API Key Authentication
 
-Aerugo bây giờ hỗ trợ **hệ thống API key song song với JWT authentication**, cho phép bạn có thể sử dụng cả hai phương pháp xác thực:
+Aerugo now supports **API key system alongside JWT authentication**, allowing you to use both authentication methods:
 
-### Cách hoạt động của API Key
+### How API Key Works
 
-1. **Format API Key**: API key có format `ak_<32_ký_tự_ngẫu_nhiên>` (ví dụ: `ak_1234567890abcdef1234567890abcdef`)
-2. **Lưu trữ bảo mật**: API key được hash bằng SHA-256 trước khi lưu vào database
-3. **Các cách sử dụng**:
-   - **Header Authorization**: `Authorization: Bearer ak_your_api_key_here`
-   - **Header X-API-Key**: `X-API-Key: ak_your_api_key_here`
-4. **Fallback thông minh**: Nếu không có API key hoặc API key không hợp lệ, hệ thống sẽ tự động thử JWT authentication
+1. **API Key Format**: API key has format `ak_<32_random_characters>` (example: `ak_1234567890abcdef1234567890abcdef`)
+2. **Secure Storage**: API key is hashed with SHA-256 before storing in database
+3. **Usage Methods**:
+   - **Authorization Header**: `Authorization: Bearer ak_your_api_key_here`
+   - **X-API-Key Header**: `X-API-Key: ak_your_api_key_here`
+4. **Smart Fallback**: If no API key or invalid API key, the system will automatically try JWT authentication
 
-### Database Schema cho API Keys (Simplified)
+### Database Schema for API Keys (Simplified)
 
 ```sql
 CREATE TABLE api_keys (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
-    key_hash VARCHAR(128) NOT NULL UNIQUE,      -- SHA-256 hash của API key
-    name VARCHAR(64) NOT NULL,                  -- Tên mô tả của key
-    expires_at TIMESTAMP,                       -- Thời gian hết hạn (optional)
-    last_used_at TIMESTAMP,                     -- Lần cuối sử dụng
-    is_active BOOLEAN DEFAULT true,             -- Trạng thái kích hoạt
+    key_hash VARCHAR(128) NOT NULL UNIQUE,      -- SHA-256 hash of API key
+    name VARCHAR(64) NOT NULL,                  -- Descriptive name of key
+    expires_at TIMESTAMP,                       -- Expiration time (optional)
+    last_used_at TIMESTAMP,                     -- Last used time
+    is_active BOOLEAN DEFAULT true,             -- Activation status
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 ```
 
-### Ví dụ sử dụng API Key
+### API Key Usage Examples
 
 ```bash
-# Sử dụng với Authorization header
+# Using with Authorization header
 curl -H "Authorization: Bearer ak_1234567890abcdef1234567890abcdef" \
      https://your-aerugo.com/api/v1/repos/repositories
 
-# Sử dụng với X-API-Key header  
+# Using with X-API-Key header  
 curl -H "X-API-Key: ak_1234567890abcdef1234567890abcdef" \
      https://your-aerugo.com/api/v1/organizations
 
-# JWT vẫn hoạt động bình thường
+# JWT still works normally
 curl -H "Authorization: Bearer <jwt_token>" \
      https://your-aerugo.com/api/v1/repos/repositories
 ```
 
-### Ưu điểm của API Key (Simplified)
+### Advantages of API Key (Simplified)
 
-- **Dễ sử dụng**: Không cần refresh token như JWT
-- **Bảo mật tốt**: Hash SHA-256, có thể set thời gian hết hạn
-- **Cache performance**: API key được cache để tối ưu hiệu suất
-- **Tương thích hoàn toàn**: JWT authentication vẫn hoạt động bình thường
-- **Không có conflict**: Hai hệ thống hoạt động song song, không xung đột
-- **Full quyền**: API key có toàn quyền như JWT, không cần phân quyền phức tạp
+- **Easy to Use**: No need for refresh token like JWT
+- **Good Security**: SHA-256 hash, can set expiration time
+- **Cache Performance**: API key is cached for performance optimization
+- **Fully Compatible**: JWT authentication still works normally
+- **No Conflicts**: Two systems work in parallel, no conflicts
+- **Full Permissions**: API key has full permissions like JWT, no complex authorization needed
 
-### Các API endpoints được hỗ trợ
+### Supported API Endpoints
 
-API key hiện tại hỗ trợ tất cả các protected endpoints:
-- ✅ **Authentication APIs**: `/api/v1/auth/*` (trừ login/register)
+API key currently supports all protected endpoints:
+- ✅ **Authentication APIs**: `/api/v1/auth/*` (except login/register)
 - ✅ **Organizations APIs**: `/api/v1/organizations/*`
 - ✅ **Repositories APIs**: `/api/v1/repos/*`
-- ✅ **Storage APIs**: `/api/v1/storage/*` (nếu được protected)
+- ✅ **Storage APIs**: `/api/v1/storage/*` (if protected)
 
 ---
 
@@ -195,9 +195,20 @@ curl -X POST http://localhost:8080/auth/register \
      -d '{"username":"myuser","password":"mypass","email":"user@example.com"}'
 
 # 3. Login with Docker CLI
+# Method 1: Manual login
 docker login localhost:8080
 Username: myuser
 Password: mypass
+
+# Method 2: Automatic login with API key (recommended)
+# First create API key via web interface or API
+./scripts/docker-login.sh localhost:8080 myuser ak_your_api_key_here
+
+# Or use environment variables
+export DOCKER_REGISTRY_HOST=localhost:8080
+export DOCKER_USERNAME=myuser  
+export API_KEY=ak_your_api_key_here
+./scripts/docker-login.sh
 
 # 4. Now you can push/pull images!
 docker tag nginx:latest localhost:8080/myorg/nginx:latest
@@ -207,8 +218,9 @@ docker pull localhost:8080/myorg/nginx:latest
 
 ### Authentication Methods
 
-- **🔑 Basic Authentication**: For Docker CLI and container runtimes
+- **🔑 Basic Authentication**: For Docker CLI and container runtimes (username/password or username/api_key)
 - **🎫 JWT Bearer Tokens**: For web applications and API clients
+- **🔐 API Key Authentication**: Enhanced security for Docker login and API access
 - **🛡️ Permission-Based Access**: Pull, push, and delete permissions per repository
 - **👥 Organization-Level Control**: Team-based access management
 
