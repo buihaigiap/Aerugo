@@ -33,7 +33,7 @@ pub struct ServerSettings {
 
 impl ServerSettings {
     pub fn address(&self) -> String {
-        // Sử dụng bind_address trực tiếp vì nó đã chứa cả host:port
+        // Use bind_address directly as it already contains host:port
         self.bind_address.clone()
     }
 }

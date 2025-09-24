@@ -153,3 +153,35 @@ pub struct NewTag {
     pub name: String,
     pub manifest_id: i64,
 }
+
+// API Key models for API key authentication
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ApiKey {
+    pub id: i64,
+    pub user_id: i64,
+    pub name: String,
+    pub key_hash: String,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewApiKey {
+    pub user_id: i64,
+    pub name: String,
+    pub key_hash: String,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyInfo {
+    pub id: i64,
+    pub name: String,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub is_active: bool,
+}

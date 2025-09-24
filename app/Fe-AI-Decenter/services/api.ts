@@ -13,9 +13,6 @@ import {
   OrganizationRole,
   ChangePasswordRequest,
   ForgotPasswordRequest,
-  RepositoryDetailsResponse,
-  AuthRequest,
-  UpdateRepositoryRequest,
 } from "../types";
 
 interface OrganizationsApiResponse {
@@ -247,53 +244,10 @@ export const createRepository = async (
   data: CreateRepositoryRequest,
   token: string
 ): Promise<Repository> => {
-  try {
-    const response = await axios.post<Repository>(
-      `${API_BASE_URL}/api/v1/repos/${namespace}`,
-      data,
-      getAuthHeaders(token)
-    );
-    return response.data;
-  } catch (error) {
-    handleError(error);
-    throw error;
-  }
-};
-
-export const fetchRepositoryDetails = async (
-  namespace: string,
-  repo_name: string,
-  token: string
-): Promise<RepositoryDetailsResponse> => {
-  try {
-    const response = await axios.get<RepositoryDetailsResponse>(
-      `${API_BASE_URL}/api/v1/repos/${namespace}/repositories/${repo_name}`,
-      getAuthHeaders(token)
-    );
-    return response.data;
-  } catch (error) {
-    handleError(error);
-    throw error;
-  }
-};
-
-export const updateRepository = async (
-  namespace: string,
-  repoName: string,
-  data: UpdateRepositoryRequest,
-  token: string
-): Promise<Repository> => {
-  try {
-    const response = await axios.put<Repository>(
-      `${API_BASE_URL}/api/v1/repos/${namespace}/${repoName}`,
-      data,
-      getAuthHeaders(token)
-    );
-    return response.data;
-  } catch (error) {
-    handleError(error);
-    throw error;
-  }
+  return fetchWithAuth<Repository>(`/api/v1/repos/${namespace}`, token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 };
 
 export const deleteRepository = async (

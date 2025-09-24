@@ -18,14 +18,14 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Start frontend development server in debug mode
-    #[cfg(debug_assertions)]
-    start_frontend_dev_server();
+    // Disabled to serve static files via backend instead
+    // #[cfg(debug_assertions)]
+    // start_frontend_dev_server();
 
     println!("🚀 Starting Aerugo Container Registry");
     if cfg!(debug_assertions) {
         println!("🔧 Development Mode");
-        println!("🔗 Backend API: http://localhost:8080");
-        println!("🔗 Frontend Dev: http://localhost:5173");
+        println!("🔗 Full Application: http://localhost:8080");
         println!("🔗 API Docs: http://localhost:8080/docs");
     } else {
         println!("🏭 Production Mode");  
@@ -34,16 +34,13 @@ async fn main() -> Result<()> {
     }
     println!();
 
-    // Initialize database connection
-    println!("Initializing database connection...");
-    let db_pool = sqlx::postgres::PgPool::connect(&settings.database.url())
+    // Initialize database connection and run migrations
+    println!("Initializing database connection and running migrations...");
+    let db_pool = aerugo::db::create_pool(&settings)
         .await
-        .context("Failed to connect to database")?;
-
-    // Skip migrations for now and create table manually
-    println!("⚠️  Skipping database migrations due to modified migration conflicts");
+        .context("Failed to create database pool and run migrations")?;
     
-    println!("Database connection and table setup completed successfully");
+    println!("Database connection and migrations completed successfully");
 
     // Initialize S3 storage
     println!("Initializing S3 storage...");
@@ -115,7 +112,7 @@ async fn main() -> Result<()> {
 
     // Create shared application state
     let state = AppState {
-        db_pool,
+        db_pool: db_pool.clone(),
         config: settings.clone(),
         storage,
         cache,
@@ -123,6 +120,19 @@ async fn main() -> Result<()> {
         email_service,
     };
     println!("Application state created successfully");
+
+    // Start background task to cleanup expired API keys
+    let cleanup_db_pool = db_pool.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Run every hour
+        loop {
+            interval.tick().await;
+            if let Err(e) = aerugo::handlers::auth::cleanup_expired_api_keys(&cleanup_db_pool).await {
+                tracing::error!("Failed to cleanup expired API keys: {}", e);
+            }
+        }
+    });
+    println!("Background API key cleanup task started");
 
     // Create application using lib.rs
     let app = create_app(state).await;

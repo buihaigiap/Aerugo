@@ -18,7 +18,7 @@ use crate::models::{
 };
 use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
 
-/// Security addon để thêm Bearer Auth vào OpenAPI
+/// Security addon to add Bearer Auth to OpenAPI
 pub struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -49,10 +49,14 @@ impl Modify for SecurityAddon {
         // Auth endpoints
         auth::register,
         auth::login,
+        auth::me, 
         auth::refresh,
         auth::change_password,
         auth::forgot_password,
         auth::verify_otp_and_reset,
+        auth::get_user_api_keys,
+        auth::create_api_key,
+        auth::delete_api_key,     
 
         // Organization endpoints
         organizations::create_organization,
@@ -69,6 +73,7 @@ impl Modify for SecurityAddon {
         repositories::create_repository,
         repositories::list_repositories,
         repositories::list_repositories_by_namespace,
+        repositories::list_public_repositories,
         repositories::get_repository,
         repositories::delete_repository,
 
@@ -98,6 +103,11 @@ impl Modify for SecurityAddon {
             auth::ChangePasswordRequest,
             auth::ForgotPasswordRequest,
             auth::VerifyOtpRequest,
+            auth::ApiKeyResponse,     
+            auth::CreateApiKeyRequest,
+            auth::CreateApiKeyResponse,
+            auth::DeleteApiKeyResponse,
+            auth::ApiKeyErrorResponse, 
 
             // Organization schemas
             Organization,

@@ -1,10 +1,11 @@
 use crate::database::models::{NewUser, User};
+use crate::models::api_key::ApiKey;
 use crate::AppState;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, http::{StatusCode, HeaderMap}, response::IntoResponse, Json};
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -13,6 +14,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use chrono::{Duration, Utc};
 use uuid::Uuid;
+use rand;
+use sha2;
+use hex;
 
 /// User registration request
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -425,8 +429,21 @@ pub async fn login(
     )
 }
 
+/// Get current user information
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    responses(
+        (status = 200, description = "User information retrieved successfully", body = UserResponse),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
 pub async fn me(
     auth: Option<TypedHeader<Authorization<Bearer>>>,
+    headers: HeaderMap,
     State(state): State<AppState>
 ) -> impl IntoResponse {
     // Add debug logging
@@ -436,17 +453,20 @@ pub async fn me(
         tracing::debug!("No auth header provided");
     }
     
-    // Extract and verify token
-    let user_id = match crate::auth::extract_user_id(
+    // Extract and verify token using dual authentication (JWT + API key)
+    let user_id = match crate::auth::extract_user_id_dual(
         auth,
-        state.config.auth.jwt_secret.expose_secret().as_bytes()
+        &headers,
+        state.config.auth.jwt_secret.expose_secret().as_bytes(),
+        &state.db_pool,
+        state.cache.as_ref()
     ).await {
         Ok(id) => {
-            tracing::debug!("Token is valid for user ID: {}", id);
+            tracing::debug!("Authentication successful for user ID: {}", id);
             id
         },
         Err(status) => {
-            tracing::debug!("Token validation failed with status: {:?}", status);
+            tracing::debug!("Authentication failed with status: {:?}", status);
             return (
                 status,
                 Json(serde_json::json!({
@@ -623,7 +643,7 @@ pub async fn logout(
     tag = "auth",
     request_body = ChangePasswordRequest,
     security(
-        ("Bearer" = [])
+        ("bearerAuth" = [])
     ),
     responses(
         (status = 200, description = "Password successfully changed"),
@@ -961,4 +981,345 @@ pub async fn verify_otp_and_reset(
             "error": "Failed to update password"
         }))
     }
+}
+
+/// API Key response (without the actual secret key)
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ApiKeyResponse {
+    /// API key ID
+    pub id: i64,
+    /// Name/description of the API key
+    pub name: Option<String>,
+    /// When this key was last used
+    pub last_used_at: Option<chrono::NaiveDateTime>,
+    /// When this key expires
+    pub expires_at: Option<chrono::NaiveDateTime>,
+    /// Whether this key is active
+    pub is_active: Option<bool>,
+    /// When this key was created
+    pub created_at: Option<chrono::NaiveDateTime>,
+}
+
+/// Create API Key request
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CreateApiKeyRequest {
+    /// Name/description for the API key
+    pub name: String,
+}
+
+/// Create API Key response (includes the actual key - only shown once!)
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CreateApiKeyResponse {
+    /// API key ID
+    pub id: i64,
+    /// The actual API key (ak_...) - ONLY SHOWN ONCE!
+    pub api_key: String,
+    /// Optional expiration date
+    pub expires_at: Option<chrono::NaiveDateTime>,
+    /// Creation timestamp
+    pub created_at: Option<chrono::NaiveDateTime>,
+    /// Security warning
+    pub warning: String,
+}
+
+/// Delete API Key response
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DeleteApiKeyResponse {
+    /// Success message
+    pub message: String,
+}
+
+/// Error response for API key operations
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ApiKeyErrorResponse {
+    /// Error message
+    pub error: String,
+    /// Error details (optional)
+    pub details: Option<String>,
+}
+
+/// Get user's API keys
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/api-keys",
+    params(
+        ("name" = Option<String>, Query, description = "Search API keys by name")
+    ),
+    responses(
+        (status = 200, description = "User API keys retrieved successfully", body = Vec<ApiKeyResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn get_user_api_keys(
+    auth_header: Option<TypedHeader<Authorization<Bearer>>>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    name: Option<axum::extract::Query<std::collections::HashMap<String, String>>>,
+) -> Result<Json<Vec<ApiKeyResponse>>, StatusCode> {
+    // Extract API key from X-API-Key header
+    let api_key = headers.get("x-api-key")
+        .and_then(|v| v.to_str().ok());
+
+    // Extract user ID using dual auth function (supports both JWT and API key)
+    let user_id = crate::auth::extract_user_id_dual_auth(
+        auth_header, 
+        api_key,
+        &state.config.auth.jwt_secret.expose_secret().as_bytes(),
+        &state.db_pool, 
+        state.cache.as_ref()
+    ).await.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Extract name filter from query parameters
+    let name_filter = name.as_ref()
+        .and_then(|query| query.get("name"))
+        .map(|n| n.as_str());
+
+    // Query user's API keys from database with optional name filter
+    let api_keys = if let Some(search_name) = name_filter {
+        sqlx::query_as!(
+            ApiKey,
+            r#"
+            SELECT id, user_id, name, key_hash, last_used_at, expires_at, created_at, updated_at, is_active
+            FROM api_keys 
+            WHERE user_id = $1 AND is_active = true AND name ILIKE $2
+            ORDER BY created_at DESC
+            "#,
+            user_id,
+            format!("%{}%", search_name)
+        )
+        .fetch_all(&state.db_pool)
+        .await
+    } else {
+        sqlx::query_as!(
+            ApiKey,
+            r#"
+            SELECT id, user_id, name, key_hash, last_used_at, expires_at, created_at, updated_at, is_active
+            FROM api_keys 
+            WHERE user_id = $1 AND is_active = true
+            ORDER BY created_at DESC
+            "#,
+            user_id
+        )
+        .fetch_all(&state.db_pool)
+        .await
+    };
+
+    let api_keys = api_keys.map_err(|e| {
+        tracing::error!("Database error fetching API keys: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Convert to response format (without the actual secret key)
+    let response: Vec<ApiKeyResponse> = api_keys
+        .into_iter()
+        .map(|key| {
+            ApiKeyResponse {
+                id: key.id,
+                name: key.name,
+                last_used_at: key.last_used_at,
+                expires_at: key.expires_at,
+                is_active: key.is_active,
+                created_at: key.created_at,
+            }
+        })
+        .collect();
+
+    Ok(Json(response))
+}
+
+/// Create a new API key for the user
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/api-keys",
+    request_body = CreateApiKeyRequest,
+    tag = "auth",
+    responses(
+        (status = 201, description = "API key created successfully", body = CreateApiKeyResponse),
+        (status = 401, description = "Unauthorized - invalid or missing JWT token", body = ApiKeyErrorResponse),
+        (status = 409, description = "Conflict - API key name already exists for this user", body = ApiKeyErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiKeyErrorResponse)
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn create_api_key(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    State(state): State<AppState>,
+    Json(request): Json<CreateApiKeyRequest>,
+) -> Result<(StatusCode, Json<CreateApiKeyResponse>), (StatusCode, Json<ApiKeyErrorResponse>)> {
+    // Extract user ID from JWT
+    let user_id = crate::auth::extract_user_id_dual_auth(
+        Some(TypedHeader(auth)), 
+        None, // No X-API-Key header for this endpoint
+        &state.config.auth.jwt_secret.expose_secret().as_bytes(),
+        &state.db_pool, 
+        state.cache.as_ref()
+    ).await.map_err(|_| {
+        let error_response = ApiKeyErrorResponse {
+            error: "Authentication failed".to_string(),
+            details: Some("Invalid or expired JWT token".to_string()),
+        };
+        (StatusCode::UNAUTHORIZED, Json(error_response))
+    })?;
+
+    // Check if user already has an API key with the same name
+    let existing_key = sqlx::query!(
+        "SELECT id FROM api_keys WHERE user_id = $1 AND name = $2 AND is_active = true",
+        user_id,
+        request.name
+    )
+    .fetch_optional(&state.db_pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error checking duplicate API key name: {}", e);
+        let error_response = ApiKeyErrorResponse {
+            error: "Database error".to_string(),
+            details: Some("Failed to check for duplicate API key names".to_string()),
+        };
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+    })?;
+
+    if existing_key.is_some() {
+        tracing::warn!("User {} attempted to create API key with duplicate name: {}", user_id, request.name);
+        let error_response = ApiKeyErrorResponse {
+            error: "Duplicate API key name".to_string(),
+            details: Some(format!("An API key with the name '{}' already exists for this user", request.name)),
+        };
+        return Err((StatusCode::CONFLICT, Json(error_response)));
+    }
+
+    // Set expiration to 15 days from now
+    let expires_at = chrono::Utc::now().naive_utc() + chrono::Duration::days(15);
+
+    // Generate new API key
+    let api_key = format!("ak_{}", hex::encode(rand::random::<[u8; 16]>()));
+    
+    // Hash the API key for storage
+    let key_hash = {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(api_key.as_bytes());
+        hex::encode(hasher.finalize())
+    };
+
+    // Insert into database
+    let api_key_record = sqlx::query_as!(
+        ApiKey,
+        r#"
+        INSERT INTO api_keys (user_id, key_hash, name, expires_at, is_active)
+        VALUES ($1, $2, $3, $4, true)
+        RETURNING id, user_id, name, key_hash, last_used_at, expires_at, created_at, updated_at, is_active
+        "#,
+        user_id,
+        key_hash,
+        request.name,
+        Some(expires_at),
+    )
+    .fetch_one(&state.db_pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error creating API key: {}", e);
+        let error_response = ApiKeyErrorResponse {
+            error: "Failed to create API key".to_string(),
+            details: Some("Database insertion error".to_string()),
+        };
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+    })?;
+
+    // Return response with the actual API key (only time it's shown!)
+    let response = CreateApiKeyResponse {
+        id: api_key_record.id,
+        api_key: api_key.clone(), // 🔑 The actual key - only shown once!
+        expires_at: api_key_record.expires_at,
+        created_at: api_key_record.created_at,
+        warning: "⚠️ SECURITY WARNING: This API key will only be shown once. Please save it securely immediately. If lost, you will need to generate a new one.".to_string(),
+    };
+
+    tracing::info!("Created new API key for user {} (expires: {})", 
+        user_id, expires_at.format("%Y-%m-%d %H:%M:%S"));
+
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+/// Delete an API key
+#[utoipa::path(
+    delete,
+    path = "/api/v1/auth/api-keys/{id}",
+    params(
+        ("id" = i64, Path, description = "API key ID to delete")
+    ),
+    tag = "auth",
+    responses(
+        (status = 200, description = "API key deleted successfully", body = DeleteApiKeyResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "API key not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn delete_api_key(
+    auth_header: Option<TypedHeader<Authorization<Bearer>>>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    axum::extract::Path(key_id): axum::extract::Path<i64>,
+) -> Result<(StatusCode, Json<DeleteApiKeyResponse>), StatusCode> {
+    // Extract API key from X-API-Key header
+    let api_key = headers.get("x-api-key")
+        .and_then(|v| v.to_str().ok());
+
+    // Extract user ID using dual auth function
+    let user_id = crate::auth::extract_user_id_dual_auth(
+        auth_header, 
+        api_key,
+        &state.config.auth.jwt_secret.expose_secret().as_bytes(),
+        &state.db_pool, 
+        state.cache.as_ref()
+    ).await.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Delete the API key (only if it belongs to the user)
+    let result = sqlx::query!(
+        "DELETE FROM api_keys WHERE id = $1 AND user_id = $2",
+        key_id,
+        user_id
+    )
+    .execute(&state.db_pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error deleting API key: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    tracing::info!("Deleted API key {} for user {}", key_id, user_id);
+    
+    let response = DeleteApiKeyResponse {
+        message: "API key deleted successfully".to_string(),
+    };
+    
+    Ok((StatusCode::OK, Json(response)))
+}
+
+/// Clean up expired API keys from database
+pub async fn cleanup_expired_api_keys(db_pool: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
+    let now = chrono::Utc::now().naive_utc();
+    
+    let result = sqlx::query!(
+        "DELETE FROM api_keys WHERE expires_at IS NOT NULL AND expires_at < $1",
+        now
+    )
+    .execute(db_pool)
+    .await?;
+
+    tracing::info!("Cleaned up {} expired API keys", result.rows_affected());
+    Ok(result.rows_affected() as i64)
 }  

@@ -1285,8 +1285,88 @@ pub async fn list_tags_namespaced(
 pub async fn get_manifest_namespaced(
     State(state): State<AppState>,
     axum::extract::Path((org, name, reference)): axum::extract::Path<(String, String, String)>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let full_name = format!("{}/{}", org, name);
+    println!("🔍 GET Manifest (namespaced) for: {}/{}/{}", org, name, reference);
+    
+    // Docker operations require authentication
+    let user_id_opt = match extract_user_from_auth(&headers, &state, false).await {
+        Ok(user_opt) => user_opt,
+        Err(response) => return response,
+    };
+
+    if user_id_opt.is_none() {
+        println!("❌ No authentication provided for manifest {}/{}:{} - Docker login required", org, name, reference);
+        return (
+            StatusCode::UNAUTHORIZED,
+            [("WWW-Authenticate", "Basic")],
+            Json(serde_json::json!({
+                "errors": [{
+                    "code": "UNAUTHORIZED",
+                    "message": "Authentication required - please run 'docker login'",
+                    "detail": {}
+                }]
+            }))
+        ).into_response();
+    }
+
+    let user_id = user_id_opt.unwrap();
+    println!("🔐 Authenticated request for manifest {}/{}:{} by user {}", org, name, reference, user_id);
+
+    // Check repository permissions
+    let repo_query = "SELECT r.is_public, r.created_by FROM repositories r JOIN organizations o ON r.organization_id = o.id WHERE o.name = $1 AND r.name = $2";
+    match sqlx::query_as::<_, (bool, i64)>(repo_query)
+        .bind(&org)
+        .bind(&name)
+        .fetch_optional(&state.db_pool)
+        .await 
+    {
+        Ok(Some((is_public, owner_id))) => {
+            if is_public {
+                // Private repository - only owner can access
+                if user_id.parse::<i64>().unwrap_or(0) == owner_id {
+                    println!("✅ Repository {}/{} is private (is_public=true) - owner access granted", org, name);
+                } else {
+                    println!("❌ Repository {}/{} is private (is_public=true) - access denied for non-owner", org, name);
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(serde_json::json!({
+                            "errors": [{
+                                "code": "DENIED",
+                                "message": "Access denied - private repository",
+                                "detail": {}
+                            }]
+                        }))
+                    ).into_response();
+                }
+            } else {
+                // Public repository - any authenticated user can access
+                println!("✅ Repository {}/{} is public (is_public=false) - authenticated access granted", org, name);
+            }
+        },
+        Ok(None) => {
+            println!("❌ Repository {}/{} not found", org, name);
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "errors": [{
+                    "code": "NAME_UNKNOWN",
+                    "message": "repository name not known to registry",
+                    "detail": {"name": format!("{}/{}", org, name)}
+                }]
+            }))).into_response();
+        },
+        Err(e) => {
+            println!("❌ Database error checking repository {}/{}: {}", org, name, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "errors": [{
+                    "code": "UNKNOWN",
+                    "message": "database error", 
+                    "detail": {}
+                }]
+            }))).into_response();
+        }
+    }
+
     get_manifest_impl(&state, &full_name, &reference).await
 }
 
