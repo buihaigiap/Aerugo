@@ -38,7 +38,7 @@ const OrganizationsManager: React.FC<OrganizationsManagerProps> = ({
 
   const handleSelectOrganization = (org: Organization) => {
     setSelectedOrganization(org);
-    setShowCreateForm(false); // Hide create form when selecting an org
+    setShowCreateForm(false); 
   };
 
   return (
@@ -75,7 +75,7 @@ const OrganizationsManager: React.FC<OrganizationsManagerProps> = ({
 
         {!showCreateForm && selectedOrganization && (
             <OrganizationDetail 
-                key={selectedOrganization.id} // Re-mount component on org change
+                key={selectedOrganization.id}
                 token={token}
                 currentUser={currentUser}
                 organization={selectedOrganization} 

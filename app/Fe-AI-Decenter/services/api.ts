@@ -1,4 +1,5 @@
-import { API_BASE_URL } from '../config';
+import axios from "axios";
+import { API_BASE_URL } from "../config";
 import {
   Organization,
   Repository,
@@ -11,15 +12,16 @@ import {
   OrganizationRole,
   ChangePasswordRequest,
   ForgotPasswordRequest,
-  ResetPasswordRequest
-} from '../types';
+  VerifyOtpRequest,
+  RepositoryDetailsResponse,
+  AuthRequest,
+  UpdateRepositoryRequest,
+} from "../types";
 
-// Interface to match the structure of the API response for organizations
 interface OrganizationsApiResponse {
   organizations: Organization[];
 }
 
-// Interface for a single organization API response
 interface OrganizationDetailsApiResponse {
   organization: Organization;
 }
@@ -28,189 +30,353 @@ interface OrganizationMembersApiResponse {
   members: OrganizationMember[];
 }
 
-// Interface for repositories API response
 interface RepositoriesApiResponse {
   repositories: Repository[];
 }
 
-
 class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
-async function fetchWithAuth<T>(
-  endpoint: string,
-  token: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = new Headers(options.headers || {});
-  headers.set('Authorization', `Bearer ${token}`);
-  if (options.method === 'POST' || options.method === 'PUT' || options.method === 'PATCH' || options.method === 'DELETE') {
-    headers.set('Content-Type', 'application/json');
+const handleError = (error: any): never => {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status || 500;
+
+    const message =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message;
+    throw new ApiError(message, status);
   }
+  throw new ApiError("An unexpected error occurred", 500);
+};
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+const getAuthHeaders = (token: string) => ({
+  headers: { Authorization: `Bearer ${token}` },
+});
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Failed to read error response');
-    console.error(`API Error: ${response.status} ${response.statusText}`, errorText);
-    throw new ApiError(`Request failed with status ${response.status}`, response.status);
+// --- Auth Endpoints ---
+export const loginUser = async (
+  data: AuthRequest
+): Promise<{ token: string }> => {
+  try {
+    const { email, password } = data;
+    const response = await axios.post<{ token: string }>(
+      `${API_BASE_URL}/api/v1/auth/login`,
+      { email, password }
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
   }
+};
 
-  // Handle cases with no response body (e.g., 204 No Content)
-  if (response.status === 204) {
-    return null as T;
+export const registerUser = async (data: AuthRequest): Promise<void> => {
+  try {
+    await axios.post(`${API_BASE_URL}/api/v1/auth/register`, data);
+  } catch (error) {
+    handleError(error);
   }
+};
 
-  return response.json() as Promise<T>;
-}
-
-// Placeholder for public fetch calls (no auth token needed)
-async function fetchPublic<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = new Headers(options.headers || {});
-  if (options.method === 'POST' || options.method === 'PUT') {
-    headers.set('Content-Type', 'application/json');
+export const fetchCurrentUser = async (token: string): Promise<User> => {
+  try {
+    const response = await axios.get<User>(
+      `${API_BASE_URL}/api/v1/auth/me`,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
   }
+};
 
-  const response = await fetch(`${API_BASE_URL}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Failed to read error response');
-    console.error(`API Error: ${response.status} ${response.statusText}`, errorText);
-    throw new ApiError(`Request failed with status ${response.status}`, response.status);
+export const changePassword = async (
+  data: ChangePasswordRequest,
+  token: string
+): Promise<void> => {
+  try {
+    await axios.put(
+      `${API_BASE_URL}/api/v1/auth/change-password`,
+      data,
+      getAuthHeaders(token)
+    );
+  } catch (error) {
+    handleError(error);
   }
+};
 
-  if (response.status === 204) {
-    return null as T;
+export const forgotPassword = async (
+  data: ForgotPasswordRequest
+): Promise<void> => {
+  try {
+    await axios.post(`${API_BASE_URL}/api/v1/auth/forgot-password`, data);
+  } catch (error) {
+    handleError(error);
   }
-
-  return response.json() as Promise<T>;
-}
-
-
-export const fetchCurrentUser = (token: string): Promise<User> => {
-  return fetchWithAuth<User>('/api/v1/auth/me', token);
 };
 
-export const changePassword = (data: ChangePasswordRequest, token: string): Promise<void> => {
-  return fetchWithAuth<void>('/api/v1/auth/change-password', token, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
+export const VerifyOtpAndResetPassword = async (
+  data: VerifyOtpRequest
+): Promise<void> => {
+  try {
+    await axios.post(`${API_BASE_URL}/api/v1/auth/verify-otp`, data);
+  } catch (error) {
+    handleError(error);
+  }
 };
 
-// Placeholder for requesting a password reset email
-export const forgotPassword = (data: ForgotPasswordRequest): Promise<void> => {
-  // This should eventually be a real API call to a corrected backend
-  console.log('Simulating sending password reset for', data.email);
-  return new Promise(resolve => setTimeout(resolve, 1000));
-  // Example of real implementation:
-  // return fetchPublic<void>('/api/v1/auth/request-password-reset', {
-  //     method: 'POST',
-  //     body: JSON.stringify(data),
-  // });
+// --- Organization Endpoints ---
+export const fetchOrganizations = async (
+  token: string
+): Promise<Organization[]> => {
+  try {
+    const response = await axios.get<OrganizationsApiResponse>(
+      `${API_BASE_URL}/api/v1/organizations`,
+      getAuthHeaders(token)
+    );
+    return response.data?.organizations || [];
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-// Placeholder for resetting the password with a token
-export const resetPassword = (data: ResetPasswordRequest): Promise<void> => {
-  // This should eventually be a real API call to a corrected backend
-  console.log('Simulating resetting password with token', data.token);
-  return new Promise(resolve => setTimeout(resolve, 1000));
-  // Example of real implementation:
-  // return fetchPublic<void>('/api/v1/auth/reset-password', {
-  //     method: 'POST',
-  //     body: JSON.stringify(data),
-  // });
+export const fetchOrganizationDetails = async (
+  orgId: number,
+  token: string
+): Promise<Organization> => {
+  try {
+    const response = await axios.get<OrganizationDetailsApiResponse>(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}`,
+      getAuthHeaders(token)
+    );
+    return response.data.organization;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-
-export const fetchOrganizations = async (token: string): Promise<Organization[]> => {
-  const data = await fetchWithAuth<OrganizationsApiResponse>('/api/v1/organizations', token);
-  return data?.organizations || [];
+export const createOrganization = async (
+  data: CreateOrganizationRequest,
+  token: string
+): Promise<Organization> => {
+  try {
+    const response = await axios.post<Organization>(
+      `${API_BASE_URL}/api/v1/organizations`,
+      data,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const fetchOrganizationDetails = async (orgId: number, token: string): Promise<Organization> => {
-  const data = await fetchWithAuth<OrganizationDetailsApiResponse>(`/api/v1/organizations/${orgId}`, token);
-  return data.organization;
+export const updateOrganization = async (
+  orgId: number,
+  data: UpdateOrganizationRequest,
+  token: string
+): Promise<Organization> => {
+  try {
+    const response = await axios.put<Organization>(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}`,
+      data,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const createOrganization = (data: CreateOrganizationRequest, token: string): Promise<Organization> => {
-  return fetchWithAuth<Organization>('/api/v1/organizations', token, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export const deleteOrganization = async (
+  orgId: number,
+  token: string
+): Promise<void> => {
+  try {
+    await axios.delete(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}`,
+      getAuthHeaders(token)
+    );
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const updateOrganization = (orgId: number, data: UpdateOrganizationRequest, token: string): Promise<Organization> => {
-  return fetchWithAuth<Organization>(`/api/v1/organizations/${orgId}`, token, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
+// --- Repository Endpoints ---
+export const fetchRepositories = async (
+  token: string
+): Promise<Repository[]> => {
+  try {
+    const response = await axios.get<RepositoriesApiResponse>(
+      `${API_BASE_URL}/api/v1/repos/repositories`,
+      getAuthHeaders(token)
+    );
+    return response.data?.repositories || [];
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const deleteOrganization = (orgId: number, token: string): Promise<void> => {
-  return fetchWithAuth<void>(`/api/v1/organizations/${orgId}`, token, {
-    method: 'DELETE',
-  });
+export const fetchRepositoriesByNamespace = async (
+  namespace: string,
+  token: string
+): Promise<Repository[]> => {
+  try {
+    const response = await axios.get<Repository[]>(
+      `${API_BASE_URL}/api/v1/repos/repositories/${namespace}`,
+      getAuthHeaders(token)
+    );
+    return response.data || [];
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const fetchRepositories = async (token: string): Promise<Repository[]> => {
-  const data = await fetchWithAuth<RepositoriesApiResponse>(`/api/v1/repos/repositories`, token);
-  return data?.repositories || [];
+export const fetchRepositoryDetails = async (
+  namespace: string,
+  repo_name: string,
+  token: string
+): Promise<RepositoryDetailsResponse> => {
+  try {
+    const response = await axios.get<RepositoryDetailsResponse>(
+      `${API_BASE_URL}/api/v1/repos/${namespace}/repositories/${repo_name}`,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const fetchRepositoriesByNamespace = async (namespace: string, token: string): Promise<Repository[]> => {
-  const data = await fetchWithAuth<Repository[]>(`/api/v1/repos/repositories/${namespace}`, token);
-  return data || [];
+export const createRepository = async (
+  namespace: string,
+  data: CreateRepositoryRequest,
+  token: string
+): Promise<Repository> => {
+  try {
+    const response = await axios.post<Repository>(
+      `${API_BASE_URL}/api/v1/repos/${namespace}`,
+      data,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const createRepository = (namespace: string, data: CreateRepositoryRequest, token: string): Promise<Repository> => {
-  return fetchWithAuth<Repository>(`/api/v1/repos/${namespace}`, token, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export const updateRepository = async (
+  namespace: string,
+  repoName: string,
+  data: UpdateRepositoryRequest,
+  token: string
+): Promise<Repository> => {
+  try {
+    const response = await axios.put<Repository>(
+      `${API_BASE_URL}/api/v1/repos/${namespace}/${repoName}`,
+      data,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const deleteRepository = (namespace: string, repoName: string, token: string): Promise<void> => {
-  return fetchWithAuth<void>(`/api/v1/repos/${namespace}/${repoName}`, token, {
-    method: 'DELETE',
-  });
+export const deleteRepository = async (
+  namespace: string,
+  repoName: string,
+  token: string
+): Promise<void> => {
+  try {
+    await axios.delete(
+      `${API_BASE_URL}/api/v1/repos/${namespace}/${repoName}`,
+      getAuthHeaders(token)
+    );
+  } catch (error) {
+    handleError(error);
+  }
 };
 
-export const fetchOrganizationMembers = async (orgId: number, token: string): Promise<OrganizationMember[]> => {
-  // The API returns an object { members: [...] }, so we extract the array.
-  const data = await fetchWithAuth<OrganizationMembersApiResponse>(`/api/v1/organizations/${orgId}/members`, token);
-  return data?.members || [];
+// --- Member Endpoints ---
+export const fetchOrganizationMembers = async (
+  orgId: number,
+  token: string
+): Promise<OrganizationMember[]> => {
+  try {
+    const response = await axios.get<OrganizationMembersApiResponse>(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}/members`,
+      getAuthHeaders(token)
+    );
+    return response.data?.members || [];
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const addOrganizationMember = (orgId: number, data: AddMemberRequest, token: string): Promise<OrganizationMember> => {
-  return fetchWithAuth<OrganizationMember>(`/api/v1/organizations/${orgId}/members`, token, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export const addOrganizationMember = async (
+  orgId: number,
+  data: AddMemberRequest,
+  token: string
+): Promise<OrganizationMember> => {
+  try {
+    const response = await axios.post<OrganizationMember>(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}/members`,
+      data,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    throw error;
+  }
 };
 
-export const updateMemberRole = (orgId: number, memberId: number, role: OrganizationRole, token: string): Promise<void> => {
-  return fetchWithAuth<void>(`/api/v1/organizations/${orgId}/members/${memberId}`, token, {
-    method: 'PUT',
-    body: JSON.stringify({ role }),
-  });
+export const updateMemberRole = async (
+  orgId: number,
+  memberId: number,
+  role: OrganizationRole,
+  token: string
+): Promise<void> => {
+  try {
+    await axios.put(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}/members/${memberId}`,
+      { role },
+      getAuthHeaders(token)
+    );
+  } catch (error) {
+    handleError(error);
+  }
 };
 
-export const deleteMember = (orgId: number, memberId: number, token: string): Promise<void> => {
-  return fetchWithAuth<void>(`/api/v1/organizations/${orgId}/members/${memberId}`, token, {
-    method: 'DELETE',
-  });
+export const deleteMember = async (
+  orgId: number,
+  memberId: number,
+  token: string
+): Promise<void> => {
+  try {
+    await axios.delete(
+      `${API_BASE_URL}/api/v1/organizations/${orgId}/members/${memberId}`,
+      getAuthHeaders(token)
+    );
+  } catch (error) {
+    handleError(error);
+  }
 };
