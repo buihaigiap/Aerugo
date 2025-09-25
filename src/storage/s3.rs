@@ -19,6 +19,13 @@ pub struct S3Storage {
     part_size: u64,
 }
 
+impl S3Storage {
+    fn make_key(&self, key: &str) -> String {
+        // Return the key as-is, allowing callers to specify full path structure
+        key.to_string()
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum S3StorageError {
     #[error("Failed to upload object: {0}")]
@@ -153,11 +160,12 @@ impl S3Storage {
 
 #[async_trait]
 impl Storage for S3Storage {
-    async fn put_blob(&self, digest: &str, data: Bytes) -> Result<()> {
+    async fn put_blob(&self, key: &str, data: Bytes) -> Result<()> {
+        let storage_key = self.make_key(key);
         self.client
             .put_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .body(ByteStream::from(data))
             .send()
             .await?;
@@ -166,7 +174,7 @@ impl Storage for S3Storage {
 
     async fn put_blob_streaming(
         &self,
-        digest: &str,
+        key: &str,
         content_length: u64,
         data: Box<dyn AsyncRead + Send + Unpin>,
     ) -> Result<()> {
@@ -181,10 +189,11 @@ impl Storage for S3Storage {
             }
             let body = ByteStream::from(bytes);
 
+            let storage_key = self.make_key(key);
             self.client
                 .put_object()
                 .bucket(&self.bucket)
-                .key(digest)
+                .key(&storage_key)
                 .content_length(content_length as i64)
                 .body(body)
                 .send()
@@ -194,11 +203,12 @@ impl Storage for S3Storage {
         }
 
         // For large files, use multipart upload
+        let storage_key = self.make_key(key);
         let multipart = self
             .client
             .create_multipart_upload()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
             .context("Failed to initiate multipart upload")?;
@@ -220,7 +230,7 @@ impl Storage for S3Storage {
                     .client
                     .upload_part()
                     .bucket(&self.bucket)
-                    .key(digest)
+                    .key(&storage_key)
                     .upload_id(multipart.upload_id().unwrap())
                     .part_number(part_number)
                     .body(ByteStream::from(part_data))
@@ -246,7 +256,7 @@ impl Storage for S3Storage {
                 .client
                 .upload_part()
                 .bucket(&self.bucket)
-                .key(digest)
+                .key(&storage_key)
                 .upload_id(multipart.upload_id().unwrap())
                 .part_number(part_number)
                 .body(ByteStream::from(part_data))
@@ -266,7 +276,7 @@ impl Storage for S3Storage {
         self.client
             .complete_multipart_upload()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .upload_id(multipart.upload_id().unwrap())
             .multipart_upload(
                 aws_sdk_s3::types::CompletedMultipartUpload::builder()
@@ -280,12 +290,13 @@ impl Storage for S3Storage {
         Ok(())
     }
 
-    async fn get_blob(&self, digest: &str) -> Result<Option<Bytes>> {
+    async fn get_blob(&self, key: &str) -> Result<Option<Bytes>> {
+        let storage_key = self.make_key(key);
         match self
             .client
             .get_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
         {
@@ -300,13 +311,14 @@ impl Storage for S3Storage {
 
     async fn get_blob_streaming(
         &self,
-        digest: &str,
+        key: &str,
     ) -> Result<Option<Box<dyn AsyncRead + Send + Unpin>>> {
+        let storage_key = self.make_key(key);
         match self
             .client
             .get_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
         {
@@ -319,12 +331,13 @@ impl Storage for S3Storage {
         }
     }
 
-    async fn delete_blob(&self, digest: &str) -> Result<bool> {
+    async fn delete_blob(&self, key: &str) -> Result<bool> {
+        let storage_key = self.make_key(key);
         match self
             .client
             .delete_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
         {
@@ -334,12 +347,13 @@ impl Storage for S3Storage {
         }
     }
 
-    async fn blob_exists(&self, digest: &str) -> Result<bool> {
+    async fn blob_exists(&self, key: &str) -> Result<bool> {
+        let storage_key = self.make_key(key);
         match self
             .client
             .head_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
         {
@@ -349,12 +363,13 @@ impl Storage for S3Storage {
         }
     }
 
-    async fn get_blob_metadata(&self, digest: &str) -> Result<Option<BlobMetadata>> {
+    async fn get_blob_metadata(&self, key: &str) -> Result<Option<BlobMetadata>> {
+        let storage_key = self.make_key(key);
         match self
             .client
             .head_object()
             .bucket(&self.bucket)
-            .key(digest)
+            .key(&storage_key)
             .send()
             .await
         {
@@ -366,7 +381,7 @@ impl Storage for S3Storage {
 
                 Ok(Some(BlobMetadata {
                     size: response.content_length.unwrap_or(0) as u64,
-                    digest: digest.to_string(),
+                    digest: key.to_string(),
                     created_at: chrono::DateTime::from_timestamp(secs, nanos)
                         .unwrap_or_else(|| chrono::Utc::now()),
                     content_type: response.content_type,

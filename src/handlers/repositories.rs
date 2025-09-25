@@ -26,6 +26,13 @@ pub struct CreateRepositoryRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UpdateRepositoryRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub is_public: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct RepositoryResponse {
     pub id: i64,
     pub organization_id: i64,
@@ -453,6 +460,252 @@ pub async fn create_repository(
     };
 
     (StatusCode::CREATED, Json(response)).into_response()
+}
+
+/// Update repository information
+#[utoipa::path(
+    put,
+    path = "/api/v1/repos/{namespace}/{repo_name}",
+    params(
+        ("namespace" = String, Path, description = "Organization namespace"),
+        ("repo_name" = String, Path, description = "Repository name")
+    ),
+    request_body = UpdateRepositoryRequest,
+    responses(
+        (status = 200, description = "Repository updated successfully", body = RepositoryResponse),
+        (status = 400, description = "Invalid request - empty name, invalid format, or name already exists"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Permission denied"),
+        (status = 404, description = "Repository not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn update_repository(
+    Path((namespace, repo_name)): Path<(String, String)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
+    Json(request): Json<UpdateRepositoryRequest>,
+) -> Response {
+    // Extract user ID from JWT token
+    let user_id = match extract_user_id(auth, state.config.auth.jwt_secret.expose_secret().as_bytes()).await {
+        Ok(id) => id,
+        Err(e) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": format!("Authentication error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Start a database transaction
+    let mut tx = match state.db_pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database transaction error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Find organization by namespace
+    let org = match sqlx::query_as::<_, Organization>(
+        "SELECT id, name, display_name, description, website_url, avatar_url, created_at, updated_at FROM organizations WHERE name = $1"
+    )
+    .bind(&namespace)
+    .fetch_optional(&mut *tx)
+    .await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(json!({
+                "error": format!("Organization '{}' not found", namespace)
+            }))).into_response()
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Check if repository exists
+    let repository = match sqlx::query_as::<_, Repository>(
+        "SELECT id, organization_id, name, description, is_public, created_at, updated_at, created_by FROM repositories WHERE organization_id = $1 AND name = $2"
+    )
+    .bind(org.id)
+    .bind(&repo_name)
+    .fetch_optional(&mut *tx)
+    .await {
+        Ok(Some(repo)) => repo,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(json!({
+                "error": format!("Repository '{}/{}' not found", namespace, repo_name)
+            }))).into_response()
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Check if user has permission to update the repository
+    // User must be organization member to update repositories
+    let is_member = match sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2)"
+    )
+    .bind(org.id)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await {
+        Ok(exists) => exists,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Database error checking permissions: {}", e)
+            }))).into_response()
+        }
+    };
+
+    if !is_member {
+        return (StatusCode::FORBIDDEN, Json(json!({
+            "error": "You don't have permission to update repositories in this organization"
+        }))).into_response()
+    }
+
+    // Validate repository name if provided (should be unique in organization)
+    if let Some(name) = &request.name {
+        // Basic name validation
+        if name.trim().is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "Repository name cannot be empty"
+            }))).into_response()
+        }
+
+        // Validate name format (allow alphanumeric, hyphens, underscores, dots)
+        if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "Repository name can only contain letters, numbers, hyphens, underscores, and dots"
+            }))).into_response()
+        }
+
+        // Check if new name already exists in the organization (and it's not the current repository)
+        if name != &repository.name {
+            let name_exists = match sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM repositories WHERE organization_id = $1 AND name = $2 AND id != $3)"
+            )
+            .bind(org.id)
+            .bind(name)
+            .bind(repository.id)
+            .fetch_one(&mut *tx)
+            .await {
+                Ok(exists) => exists,
+                Err(e) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                        "error": format!("Database error checking name uniqueness: {}", e)
+                    }))).into_response()
+                }
+            };
+
+            if name_exists {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": format!("Repository with name '{}' already exists in organization '{}'", name, namespace)
+                }))).into_response()
+            }
+        }
+    }
+
+    // Build dynamic update query based on provided fields
+    let mut update_fields = Vec::new();
+    let mut query_params = Vec::new();
+    let mut param_counter = 1;
+
+    if let Some(name) = &request.name {
+        update_fields.push(format!("name = ${}", param_counter));
+        query_params.push(name.clone());
+        param_counter += 1;
+    }
+
+    if let Some(description) = &request.description {
+        update_fields.push(format!("description = ${}", param_counter));
+        query_params.push(description.clone());
+        param_counter += 1;
+    }
+
+    if let Some(is_public) = request.is_public {
+        update_fields.push(format!("is_public = ${}", param_counter));
+        query_params.push(is_public.to_string());
+        param_counter += 1;
+    }
+
+    // Always update the updated_at timestamp
+    update_fields.push("updated_at = CURRENT_TIMESTAMP".to_string());
+
+    if update_fields.len() == 1 {  // Only has updated_at field
+        return (StatusCode::BAD_REQUEST, Json(json!({
+            "error": "No fields to update provided"
+        }))).into_response()
+    }
+
+    // Build and execute update query
+    let update_query = format!(
+        "UPDATE repositories SET {} WHERE id = ${} RETURNING *",
+        update_fields.join(", "),
+        param_counter
+    );
+
+    let mut query = sqlx::query_as::<_, Repository>(&update_query);
+    
+    // Bind parameters in the same order they were added
+    if let Some(name) = &request.name {
+        query = query.bind(name);
+    }
+    if let Some(description) = &request.description {
+        query = query.bind(description);
+    }
+    if let Some(is_public) = request.is_public {
+        query = query.bind(is_public);
+    }
+    query = query.bind(repository.id);
+
+    let updated_repository = match query.fetch_one(&mut *tx).await {
+        Ok(repo) => repo,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("Failed to update repository: {}", e)
+            }))).into_response()
+        }
+    };
+
+    // Commit the transaction
+    if let Err(e) = tx.commit().await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "error": format!("Failed to commit transaction: {}", e)
+        }))).into_response()
+    }
+
+    // Return the updated repository
+    let response = RepositoryResponse {
+        id: updated_repository.id,
+        organization_id: updated_repository.organization_id,
+        name: updated_repository.name,
+        description: updated_repository.description,
+        is_public: updated_repository.is_public,
+        created_by: updated_repository.created_by,
+        created_at: updated_repository.created_at,
+        updated_at: updated_repository.updated_at,
+        organization: OrganizationInfo {
+            id: org.id,
+            name: org.name,
+            display_name: Some(org.display_name),
+            description: org.description,
+            website_url: org.website_url,
+        },
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
 
 #[utoipa::path(

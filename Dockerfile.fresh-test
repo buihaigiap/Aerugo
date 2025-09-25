@@ -1,0 +1,8 @@
+FROM busybox:latest
+
+# Create unique content to ensure new layers
+RUN echo "Fresh test $(date +%s)" > /fresh-test.txt
+RUN echo "New repository test" >> /fresh-test.txt
+RUN echo "Checking blob storage structure" >> /fresh-test.txt
+
+CMD cat /fresh-test.txt

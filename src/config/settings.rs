@@ -195,12 +195,12 @@ impl Settings {
                 }
             },
             storage: StorageSettings {
-                endpoint: std::env::var("S3_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string()),
-                region: std::env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-                bucket: std::env::var("S3_BUCKET").unwrap_or_else(|_| "aerugo".to_string()),
-                access_key_id: Secret::new(std::env::var("S3_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string())),
-                secret_access_key: Secret::new(std::env::var("S3_SECRET_KEY").unwrap_or_else(|_| "minioadmin".to_string())),
-                use_path_style: std::env::var("S3_USE_PATH_STYLE")
+                endpoint: std::env::var("STORAGE_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string()),
+                region: std::env::var("STORAGE_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+                bucket: std::env::var("STORAGE_BUCKET").unwrap_or_else(|_| "aerugo".to_string()),
+                access_key_id: Secret::new(std::env::var("STORAGE_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string())),
+                secret_access_key: Secret::new(std::env::var("STORAGE_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string())),
+                use_path_style: std::env::var("STORAGE_USE_PATH_STYLE")
                     .ok()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(true),

@@ -71,6 +71,7 @@ impl Modify for SecurityAddon {
 
         // Repository endpoints
         repositories::create_repository,
+        repositories::update_repository,
         repositories::list_repositories,
         repositories::list_repositories_by_namespace,
         repositories::list_public_repositories,
@@ -124,6 +125,7 @@ impl Modify for SecurityAddon {
             
             // Additional repository schemas
             repositories::CreateRepositoryRequest,
+            repositories::UpdateRepositoryRequest,
             repositories::RepositoryResponse,
             repositories::OrganizationInfo,
             repositories::RepositoryDetailsResponse,

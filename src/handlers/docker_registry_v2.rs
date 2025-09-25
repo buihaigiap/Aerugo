@@ -1324,11 +1324,14 @@ pub async fn get_manifest_namespaced(
     {
         Ok(Some((is_public, owner_id))) => {
             if is_public {
+                // Public repository - any authenticated user can access
+                println!("✅ Repository {}/{} is public (is_public=true) - authenticated access granted", org, name);
+            } else {
                 // Private repository - only owner can access
                 if user_id.parse::<i64>().unwrap_or(0) == owner_id {
-                    println!("✅ Repository {}/{} is private (is_public=true) - owner access granted", org, name);
+                    println!("✅ Repository {}/{} is private (is_public=false) - owner access granted", org, name);
                 } else {
-                    println!("❌ Repository {}/{} is private (is_public=true) - access denied for non-owner", org, name);
+                    println!("❌ Repository {}/{} is private (is_public=false) - access denied for non-owner", org, name);
                     return (
                         StatusCode::FORBIDDEN,
                         Json(serde_json::json!({
@@ -1340,9 +1343,6 @@ pub async fn get_manifest_namespaced(
                         }))
                     ).into_response();
                 }
-            } else {
-                // Public repository - any authenticated user can access
-                println!("✅ Repository {}/{} is public (is_public=false) - authenticated access granted", org, name);
             }
         },
         Ok(None) => {
@@ -1484,7 +1484,7 @@ async fn get_manifest_impl(
             // Parse cached manifest to extract headers
             if let Ok(manifest_json) = String::from_utf8(cached_manifest.to_vec()) {
                 if let Ok(manifest_value) = serde_json::from_str::<serde_json::Value>(&manifest_json) {
-                    let digest = format!("sha256:{:x}", Sha256::digest(cached_manifest.as_ref()));
+                    let digest = format!("sha256:{}", hex::encode(Sha256::digest(cached_manifest.as_ref())));
                     let media_type = manifest_value.get("mediaType")
                         .and_then(|v| v.as_str())
                         .unwrap_or("application/vnd.docker.distribution.manifest.v2+json");
@@ -1604,7 +1604,9 @@ async fn get_manifest_impl(
             println!("✅ Found manifest in database: digest={}, media_type={}, size={}", digest, media_type, size);
             
             // Try to retrieve the actual manifest content from S3 storage first
-            let manifest_blob_key = format!("blobs/{}", digest);
+            // Extract repository name (last part after /) for storage key
+            let repo_name = name.split('/').last().unwrap_or(name);
+            let manifest_blob_key = format!("blobs/{}/{}", repo_name, digest);
             let manifest_content = match state.storage.get_blob(&manifest_blob_key).await {
                 Ok(Some(content)) => {
                     println!("✅ Retrieved manifest content from S3: {} bytes", content.len());
@@ -1740,42 +1742,130 @@ async fn get_manifest_impl(
 }
 
 async fn head_manifest_impl(
-    _state: &AppState,
+    state: &AppState,
     name: &str,
     reference: &str,
 ) -> impl IntoResponse {
-    // TODO: Implement actual manifest existence check
-    println!("Checking manifest existence for {}/{}", name, reference);
+    println!("🔍 HEAD Manifest: {}/{}", name, reference);
     
-    // Use the same manifest structure as in get_manifest_impl to calculate the correct digest
-    let manifest = json!({
-        "schemaVersion": 2,
-        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-        "config": {
-            "mediaType": "application/vnd.docker.container.image.v1+json",
-            "size": 1469,
-            "digest": "sha256:9234e8fb04c47cfe0f49931e4ac7eb76fa904e33b7f8576aec0501c085f02516"
-        },
-        "layers": [
-            {
-                "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
-                "size": 3208942,
-                "digest": "sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1"
+    // Parse repository name (handle org/repo format)
+    let (org_name, repo_name) = if name.contains('/') {
+        let parts: Vec<&str> = name.splitn(2, '/').collect();
+        (Some(parts[0]), parts[1])
+    } else {
+        (None, name)
+    };
+    
+    // Find repository ID
+    let repository_id = if let Some(org) = org_name {
+        // Namespaced repository (org/repo)
+        match sqlx::query!(
+            "SELECT r.id FROM repositories r 
+             JOIN organizations o ON r.organization_id = o.id 
+             WHERE o.name = $1 AND r.name = $2",
+            org, repo_name
+        )
+        .fetch_optional(&state.db_pool)
+        .await
+        {
+            Ok(Some(row)) => row.id,
+            Ok(None) => {
+                println!("❌ Repository {}/{} not found for HEAD", org, repo_name);
+                return (
+                    StatusCode::NOT_FOUND,
+                    HeaderMap::new(),
+                ).into_response();
+            },
+            Err(e) => {
+                println!("❌ Database error during HEAD: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                ).into_response();
             }
-        ]
-    });
+        }
+    } else {
+        // Simple repository name - look under default organization (id=1)
+        match sqlx::query!(
+            "SELECT id FROM repositories WHERE name = $1 AND organization_id = 1",
+            repo_name
+        )
+        .fetch_optional(&state.db_pool)
+        .await
+        {
+            Ok(Some(row)) => row.id,
+            Ok(None) => {
+                println!("❌ Repository {} not found for HEAD", repo_name);
+                return (
+                    StatusCode::NOT_FOUND,
+                    HeaderMap::new(),
+                ).into_response();
+            },
+            Err(e) => {
+                println!("❌ Database error during HEAD: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                ).into_response();
+            }
+        }
+    };
     
-    // Calculate proper digest for this manifest
-    let manifest_json = serde_json::to_string(&manifest).unwrap();
-    let digest = format!("sha256:{:x}", Sha256::digest(manifest_json.as_bytes()));
-    let content_length = manifest_json.len().to_string();
+    // Find manifest by tag or digest
+    let result = if reference.starts_with("sha256:") {
+        // Direct digest lookup
+        sqlx::query(
+            "SELECT digest, media_type, size FROM manifests 
+             WHERE repository_id = $1 AND digest = $2"
+        )
+        .bind(repository_id)
+        .bind(reference)
+        .fetch_optional(&state.db_pool)
+        .await
+    } else {
+        // Tag lookup 
+        sqlx::query(
+            "SELECT m.digest, m.media_type, m.size 
+             FROM manifests m 
+             JOIN tags t ON m.id = t.manifest_id 
+             WHERE t.repository_id = $1 AND t.name = $2"
+        )
+        .bind(repository_id)
+        .bind(reference)
+        .fetch_optional(&state.db_pool)
+        .await
+    };
     
-    let mut headers = HeaderMap::new();
-    headers.insert("Content-Type", HeaderValue::from_static("application/vnd.docker.distribution.manifest.v2+json"));
-    headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
-    headers.insert("Content-Length", HeaderValue::from_str(&content_length).unwrap());
-    
-    (StatusCode::OK, headers)
+    match result {
+        Ok(Some(row)) => {
+            let digest: String = row.get("digest");
+            let media_type: String = row.get("media_type");
+            let size: i64 = row.get("size");
+            
+            println!("✅ HEAD found manifest: digest={}, size={}", digest, size);
+            
+            let mut headers = HeaderMap::new();
+            headers.insert("Content-Type", HeaderValue::from_str(&media_type).unwrap());
+            headers.insert("Docker-Content-Digest", HeaderValue::from_str(&digest).unwrap());
+            headers.insert("Content-Length", HeaderValue::from_str(&size.to_string()).unwrap());
+            
+            (StatusCode::OK, headers).into_response()
+        },
+        Ok(None) => {
+            println!("❌ Manifest not found for HEAD: {}/{}", name, reference);
+            (
+                StatusCode::NOT_FOUND,
+                HeaderMap::new(),
+            ).into_response()
+        },
+        Err(e) => {
+            println!("❌ Database error during HEAD: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+            ).into_response()
+        }
+    }
 }
 
 async fn put_manifest_impl(
@@ -1789,12 +1879,15 @@ async fn put_manifest_impl(
     println!("🚀 PUT Manifest: {}/{} - {} bytes", name, reference, body.len());
     println!("Content-Type: {:?}", headers.get("content-type"));
     
-    // Calculate digest 
+    // Calculate digest from the exact bytes Docker sent (no modification allowed)
     let digest = format!("sha256:{}", hex::encode(Sha256::digest(body.as_bytes())));
     let size = body.len() as i64;
     let media_type = headers.get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("application/vnd.docker.distribution.manifest.v2+json");
+    
+    println!("📝 Manifest body: {} bytes", body.len());
+    println!("🔍 Calculated digest: {}", digest);
     
     // Parse repository name (handle org/repo format)
     let (org_name, repo_name) = if name.contains('/') {
@@ -1941,8 +2034,10 @@ async fn put_manifest_impl(
         }
     };
 
-    // Store manifest content in S3 storage as a blob
-    let manifest_blob_key = format!("blobs/{}", digest);  // Full blobs/ path
+    // Store manifest content in S3 storage as a blob (exact bytes as received)
+    // Extract repository name (last part after /) for storage key
+    let repo_name = name.split('/').last().unwrap_or(name);
+    let manifest_blob_key = format!("blobs/{}/{}", repo_name, digest);  // Organize by repository
     let _s3_success = match state.storage.put_blob(&manifest_blob_key, Bytes::from(body.clone())).await {
         Ok(_) => {
             println!("✅ Manifest content stored in S3 blobs folder: {}", manifest_blob_key);
@@ -1955,7 +2050,7 @@ async fn put_manifest_impl(
         }
     };
     
-    // Always store manifest content in memory cache as backup
+    // Always store manifest content in memory cache as backup (exact bytes as received)
     {
         let mut cache = state.manifest_cache.write().await;
         cache.insert(digest.clone(), body.clone());
@@ -2054,7 +2149,9 @@ async fn get_blob_impl(
     println!("Getting blob for {}/{}", name, digest);
     
     // Try to get blob from S3 storage first
-    let blob_key = format!("blobs/{}", digest);
+    // Extract repository name (last part after /) for storage key
+    let repo_name = name.split('/').last().unwrap_or(name);
+    let blob_key = format!("blobs/{}/{}", repo_name, digest);
     match state.storage.get_blob(&blob_key).await {
         Ok(Some(data)) => {
             println!("Found blob in S3: {} bytes", data.len());
@@ -2401,7 +2498,9 @@ async fn upload_blob_chunk_impl(
     println!("Chunk size: {}", body.len());
     
     // Store chunk data in temporary storage keyed by upload UUID
-    let temp_key = format!("uploads/{}/{}", name, uuid);
+    // Extract repository name (last part after /) for storage key
+    let repo_name = name.split('/').last().unwrap_or(name);
+    let temp_key = format!("uploads/{}/{}", repo_name, uuid);
     let body_len = body.len();
     
     match state.storage.put_blob(&temp_key, body).await {
@@ -2439,12 +2538,14 @@ async fn complete_blob_upload_impl(
     println!("Expected digest: {}", digest);
     println!("Final chunk size: {}", body.len());
     
-    // Final blob key in S3
-    let blob_key = format!("blobs/{}", digest);
+    // Final blob key in S3 - organize by repository name
+    // Extract repository name (last part after /) for storage key
+    let repo_name = name.split('/').last().unwrap_or(name);
+    let blob_key = format!("blobs/{}/{}", repo_name, digest);
     
     // If there's a final chunk, append it to the existing data
     if !body.is_empty() {
-        let temp_key = format!("uploads/{}/{}", name, uuid);
+        let temp_key = format!("uploads/{}/{}", repo_name, uuid);
         
         // Get existing data from temp storage
         let existing_data = match state.storage.get_blob(&temp_key).await {
@@ -2492,7 +2593,7 @@ async fn complete_blob_upload_impl(
         }
     } else {
         // No final chunk, just move temp data to final location
-        let temp_key = format!("uploads/{}/{}", name, uuid);
+        let temp_key = format!("uploads/{}/{}", repo_name, uuid);
         
         match state.storage.get_blob(&temp_key).await {
             Ok(Some(data)) => {
