@@ -52,7 +52,7 @@ impl EmailService {
         reset_token: &str,
         reset_url: &str,
     ) -> Result<()> {
-        let subject = "Reset Your Password - Aerugo Registry";
+        let subject = "Reset Your Password - Aerugo ";
         let html_body = self.generate_forgot_password_html(to_name, reset_token, reset_url);
         let text_body = self.generate_forgot_password_text(to_name, reset_token, reset_url);
 
@@ -178,13 +178,13 @@ impl EmailService {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔐 Aerugo Registry</h1>
+            <h1>🔐 Aerugo</h1>
             <p>Password Reset Request</p>
         </div>
         
         <h2>Hello {}!</h2>
         
-        <p>We received a request to reset your password for your Aerugo Registry account.</p>
+        <p>We received a request to reset your password for your Aerugo account.</p>
         
         <p><strong>Your password reset verification code is:</strong></p>
         
@@ -204,7 +204,7 @@ impl EmailService {
         </ul>
         
         <div class="footer">
-            <p>© 2025 Aerugo Registry - Decenter.ai</p>
+            <p>© 2025 Aerugo  - Decenter.ai</p>
             <p>This email was sent from an automated system. Please do not reply.</p>
         </div>
     </div>
@@ -223,7 +223,7 @@ impl EmailService {
         format!(
             r#"Hello {}!
 
-We received a request to reset your password for your Aerugo Registry account.
+We received a request to reset your password for your Aerugo  account.
 
 Your password reset verification code is:
 
@@ -236,7 +236,7 @@ IMPORTANT:
 - If you didn't request this, you can safely ignore this email  
 - For security reasons, never share this code with anyone
 
-© 2025 Aerugo Registry - Decenter.ai
+© 2025 Aerugo  - Decenter.ai
 This email was sent from an automated system. Please do not reply."#,
             to_name, reset_token
         )

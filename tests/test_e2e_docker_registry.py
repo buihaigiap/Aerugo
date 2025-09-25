@@ -107,7 +107,7 @@ class DockerE2ETester:
         dockerfile_content = """FROM alpine:latest
 LABEL maintainer="aerugo-test"
 LABEL test.version="1.0"
-RUN echo "Hello from Aerugo Registry Test" > /hello.txt
+RUN echo "Hello from Aerugo  Test" > /hello.txt
 CMD ["cat", "/hello.txt"]
 """
         dockerfile_path = os.path.join(self.temp_dir, "Dockerfile")
@@ -276,7 +276,7 @@ CMD ["cat", "/hello.txt"]
                 logger.info(f"Container output: {result.stdout.strip()}")
                 
                 # Check if our test content is there
-                if "Hello from Aerugo Registry Test" in result.stdout:
+                if "Hello from Aerugo  Test" in result.stdout:
                     logger.info("✓ Container content verified")
                     return True
                 else:

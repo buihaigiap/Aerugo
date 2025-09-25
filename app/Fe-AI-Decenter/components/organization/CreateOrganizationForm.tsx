@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import { createOrganization } from "../../services/api";
-import { CreateOrganizationRequest } from "../../types";
-import Input from "../Input";
-import Button from "../Button";
+import React, { useState } from 'react';
+import { createOrganization } from '../../services/api';
+import { CreateOrganizationRequest } from '../../types';
+import Input from '../Input';
+import Button from '../Button';
 
 interface CreateOrganizationFormProps {
   token: string;
@@ -10,38 +10,31 @@ interface CreateOrganizationFormProps {
   onCancel: () => void;
 }
 
-const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({
-  token,
-  onSuccess,
-  onCancel,
-}) => {
+const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({ token, onSuccess, onCancel }) => {
   const [formData, setFormData] = useState<CreateOrganizationRequest>({
-    name: "",
-    display_name: "",
-    description: "",
-    avatar_url: "",
-    website_url: "",
+    name: '',
+    display_name: '',
+    description: '',
+    website_url: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.name || !formData.display_name) {
-      setError("Organization name and display name are required.");
+      setError('Organization name and display name are required.');
       return;
     }
     // Basic validation for org name (URL-friendly)
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(formData.name)) {
-      setError(
-        "Name must be lowercase, alphanumeric, and can contain hyphens."
-      );
-      return;
+        setError('Name must be lowercase, alphanumeric, and can contain hyphens.');
+        return;
     }
 
     setIsLoading(true);
@@ -49,13 +42,12 @@ const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({
     try {
       const payload: CreateOrganizationRequest = {
         ...formData,
-        avatar_url: formData.avatar_url || undefined,
         website_url: formData.website_url || undefined,
       };
       await createOrganization(payload, token);
       onSuccess();
     } catch (err) {
-      setError("Failed to create organization. Please try again.");
+      setError('Failed to create organization. Please try again.');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -64,9 +56,7 @@ const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-      <h3 className="text-xl font-bold text-slate-50 mb-4">
-        Create New Organization
-      </h3>
+      <h3 className="text-xl font-bold text-slate-50 mb-4">Create New Organization</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           id="display_name"
@@ -85,16 +75,15 @@ const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({
           onChange={handleChange}
           placeholder="my-awesome-team"
           required
+          
         />
-        <p className="text-xs text-slate-400 -mt-2 ml-1">
-          Lowercase, numbers, and hyphens only.
-        </p>
+        <p className="text-xs text-slate-400 -mt-2 ml-1">Lowercase, numbers, and hyphens only.</p>
 
         <Input
           id="description"
           name="description"
           label="Description (Optional)"
-          value={formData.description || ""}
+          value={formData.description || ''}
           onChange={handleChange}
           placeholder="A brief description of your organization."
         />
@@ -103,33 +92,26 @@ const CreateOrganizationForm: React.FC<CreateOrganizationFormProps> = ({
           name="website_url"
           label="Website URL (Optional)"
           type="url"
-          value={formData.website_url || ""}
+          value={formData.website_url || ''}
           onChange={handleChange}
           placeholder="https://example.com"
         />
-        <Input
-          id="avatar_url"
-          name="avatar_url"
-          label="Avatar URL (Optional)"
-          type="url"
-          value={formData.avatar_url || ""}
-          onChange={handleChange}
-          placeholder="https://example.com/logo.png"
-        />
 
         {error && <p className="text-sm text-red-500">{error}</p>}
-
-        <div className="flex justify-end items-center space-x-4 pt-2">
-          <Button
-            type="button"
-            onClick={onCancel}
-            className="bg-transparent hover:bg-slate-700 text-slate-300"
-          >
-            Cancel
-          </Button>
-          <Button type="submit" isLoading={isLoading} fullWidth={false}>
-            Create Organization
-          </Button>
+        
+        <div className="flex justify-between items-center mt-6 pt-5 border-t border-slate-700/60">
+            <Button 
+              type="button" 
+              onClick={onCancel} 
+              fullWidth={false}
+              className="bg-transparent hover:bg-slate-700 border-slate-700 hover:border-slate-600 text-slate-300"
+              disabled={isLoading}
+            >
+                Cancel
+            </Button>
+            <Button type="submit" isLoading={isLoading} fullWidth={false}>
+                Create Organization
+            </Button>
         </div>
       </form>
     </div>

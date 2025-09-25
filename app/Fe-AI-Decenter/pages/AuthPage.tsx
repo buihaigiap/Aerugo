@@ -1,282 +1,528 @@
-import React, { useState, useRef } from "react";
-import { Link } from "react-router-dom";
-import LoginForm from "../components/LoginForm";
-import RegisterForm from "../components/RegisterForm";
-import { AuthMode } from "../types";
-import { AerugoIcon } from "../components/icons/DockerIcon";
-import { BriefcaseIcon } from "../components/icons/BriefcaseIcon";
-import { ShieldCheckIcon } from "../components/icons/ShieldCheckIcon";
-import { CodeBracketIcon } from "../components/icons/CodeBracketIcon";
-import { ServerStackIcon } from "../components/icons/ServerStackIcon";
-import { UsersIcon } from "../components/icons/UsersIcon";
-import { CloudIcon } from "../components/icons/CloudIcon";
-import { RocketLaunchIcon } from "../components/icons/RocketLaunchIcon";
 
-interface AuthPageProps {
-  onLoginSuccess: (token: string) => void;
-}
 
-const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
-  const [authMode, setAuthMode] = useState<AuthMode>(AuthMode.Register);
-  const authSectionRef = useRef<HTMLDivElement>(null);
+// FIX: Imported useState to resolve 'Cannot find name' error.
+import React, { useRef, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BriefcaseIcon } from '../components/icons/BriefcaseIcon';
+import { ShieldCheckIcon } from '../components/icons/ShieldCheckIcon';
+import { CodeBracketIcon } from '../components/icons/CodeBracketIcon';
+import { ServerStackIcon } from '../components/icons/ServerStackIcon';
+import { UsersIcon } from '../components/icons/UsersIcon';
+import { CloudIcon } from '../components/icons/CloudIcon';
+import { RocketLaunchIcon } from '../components/icons/RocketLaunchIcon';
+import { GithubIcon } from '../components/icons/GithubIcon';
+import { TwitterIcon } from '../components/icons/TwitterIcon';
+import { DiscordIcon } from '../components/icons/DiscordIcon';
+import AnimatedParticleBackground from '../components/AnimatedParticleBackground';
+import { ChipIcon } from '../components/icons/ChipIcon';
+
+const AuthPage: React.FC = () => {
   const introductionSectionRef = useRef<HTMLDivElement>(null);
-
-  const switchMode = (mode: AuthMode) => {
-    setAuthMode(mode);
-  };
-
-  const handleRegisterSuccess = () => {
-    setAuthMode(AuthMode.Login);
-  };
-
-  const handleGetStartedClick = () => {
-    setAuthMode(AuthMode.Register);
-    authSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const cardsContainerRef = useRef<HTMLDivElement>(null);
 
   const handleDocsClick = () => {
-    introductionSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+    introductionSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  useEffect(() => {
+    // Intersection observer for cards
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.1 });
+
+    if (cardsContainerRef.current) {
+        observer.observe(cardsContainerRef.current);
+    }
+    
+    return () => {
+        if (cardsContainerRef.current) {
+            observer.unobserve(cardsContainerRef.current);
+        }
+    };
+  }, []);
+
+  const coreConcepts = [
+    {
+        icon: <BriefcaseIcon className="w-4 h-4 text-sky-400"/>,
+        title: 'Organizations',
+        description: 'Create dedicated workspaces for your teams or projects. Each organization is a self-contained unit with its own members and repositories.'
+    },
+    {
+        icon: <ServerStackIcon className="w-4 h-4 text-sky-400"/>,
+        title: 'Repositories',
+        description: 'Store and manage your container images. Repositories belong to organizations, inheriting their access policies.'
+    },
+    {
+        icon: <UsersIcon className="w-4 h-4 text-sky-400"/>,
+        title: 'Members & Roles',
+        description: 'Invite users to your organizations with role-based access control (Owner, Admin, Member) to ensure security and proper governance.'
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-slate-100 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans overflow-x-hidden">
       {/* Header */}
-      <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20 border-b border-slate-800/50">
-        <nav className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
-          <div className="flex items-center space-x-3">
-            <AerugoIcon className="w-8 h-8 text-indigo-400" />
-            <span className="text-xl font-bold text-slate-50">
-              Aerugo Registry
-            </span>
-          </div>
-          <div className="flex items-center flex-wrap justify-center gap-x-4 gap-y-2 sm:gap-x-6">
-            <button
-              onClick={handleDocsClick}
-              className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-2 py-1 transition-colors"
-            >
-              Introduction
-            </button>
+      <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/80 backdrop-blur-lg sticky top-0 z-30 border-b border-slate-800">
+        <nav className="flex items-center justify-between">
+          <Link to="/" className="flex items-center space-x-3 group">
+            <img src="/components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
+            <span className="brand-font text-3xl font-bold tracking-wider bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text">Aerugo</span>
+          </Link>
+          <div className="flex items-center gap-x-2 sm:gap-x-4">
+             <button
+                onClick={handleDocsClick}
+                className="font-semibold text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-3 py-2 transition-colors"
+             >
+                Introduction
+              </button>
+              <Link
+                to="/docs-public"
+                className="font-semibold text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-3 py-2 transition-colors"
+              >
+                Docs
+              </Link>
             <Link
-              to="/docs"
-              className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-2 py-1 transition-colors"
-            >
-              Docs
-            </Link>
-            <button
-              onClick={() => {
-                setAuthMode(AuthMode.Login);
-                authSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-2 py-1 transition-colors"
-            >
-              Sign In
-            </button>
+                to="/login"
+                className="font-semibold text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded px-3 py-2 transition-colors"
+              >
+                Sign In
+              </Link>
           </div>
         </nav>
       </header>
 
       {/* Hero Section */}
-      <main className="pt-20 pb-16 sm:pt-24 lg:pt-32 text-center">
-        <div className="max-w-4xl mx-auto px-4">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text">
+      <main className="relative pt-20 pb-16 sm:pt-24 lg:pt-32 text-center">
+        <AnimatedParticleBackground />
+        <div className="relative z-10 max-w-4xl mx-auto px-4">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text animate-shimmer">
             The Modern, Secure Container Registry
           </h1>
           <p className="mt-6 max-w-2xl mx-auto text-lg text-slate-400">
-            Streamline your development workflow with a private, scalable, and
-            easy-to-use registry for all your container images.
+            Streamline your development workflow with a private, scalable, and easy-to-use registry for all your container images.
           </p>
-          <div className="mt-8 flex justify-center gap-4">
-            <button
-              onClick={handleGetStartedClick}
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-md shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          <div className="mt-10">
+            <a
+              href="https://decenter.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-8 py-4 font-semibold text-white bg-gradient-to-r from-sky-500 to-indigo-600 rounded-full shadow-lg transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-sky-400/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-sky-500 animate-subtle-pulse"
             >
-              Get Started for Free
-            </button>
+              <ChipIcon className="w-6 h-6 mr-3" />
+              <span>Explore Decenter AI</span>
+            </a>
           </div>
         </div>
       </main>
 
       {/* Introduction Section */}
-      <section
-        ref={introductionSectionRef}
-        id="introduction"
-        className="py-20 bg-transparent scroll-mt-20"
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-slate-50">
-              Built for Performance, Security, and Scale
-            </h2>
-            <p className="mt-4 max-w-3xl mx-auto text-lg text-slate-400">
-              Aerugo is a next-generation, distributed, and multi-tenant
-              container registry built with Rust. It is designed for high
-              performance and scalability, leveraging an S3-compatible object
-              storage backend.
-            </p>
-          </div>
-          <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            <IntroFeature
-              icon={<ServerStackIcon className="h-8 w-8 text-indigo-400" />}
-              title="Distributed & Highly Available"
-              description="Designed to run in a clustered environment with no single point of failure."
+      <section ref={introductionSectionRef} id="introduction" className="relative py-24 sm:py-32 bg-slate-900/70 scroll-mt-20 overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 z-0">
+            {/* Pulsing Core */}
+            <div className="absolute inset-0 bg-indigo-950/30 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)] animate-pulse-glow"></div>
+            {/* Scrolling Grid */}
+            <div 
+                className="absolute inset-0 opacity-[0.05] animate-scroll-grid" 
+                style={{
+                    backgroundImage: 'linear-gradient(rgba(203, 213, 225, 0.5) 1px, transparent 1px), linear-gradient(to right, rgba(203, 213, 225, 0.5) 1px, transparent 1px)',
+                    backgroundSize: '4rem 4rem',
+                }}
             />
-            <IntroFeature
-              icon={<UsersIcon className="h-8 w-8 text-indigo-400" />}
-              title="Multi-tenancy"
-              description="First-class support for users and organizations with granular access control."
-            />
-            <IntroFeature
-              icon={<CloudIcon className="h-8 w-8 text-indigo-400" />}
-              title="S3-Compatible Backend"
-              description="Uses any S3-compatible object storage for durability and infinite scalability."
-            />
-            <IntroFeature
-              icon={<RocketLaunchIcon className="h-8 w-8 text-indigo-400" />}
-              title="Written in Rust"
-              description="Provides memory safety, concurrency, and performance for a secure, efficient core."
-            />
-          </div>
+            {/* Running Lights */}
+            <div className="absolute inset-0 animate-running-lights-vertical"></div>
+            <div className="absolute inset-0 animate-running-lights-horizontal"></div>
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+                <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-teal-300 via-sky-400 to-indigo-400 text-transparent bg-clip-text animate-shimmer">
+                    Built for the Future of Development
+                </h2>
+                <p className="mt-6 max-w-3xl mx-auto text-lg text-slate-300/90">
+                    Aerugo is a next-generation, distributed, and multi-tenant container registry built with Rust. Designed for high performance and scalability, leveraging an S3-compatible object storage backend.
+                </p>
+            </div>
+            <div ref={cardsContainerRef} className="mt-20 grid gap-8 md:grid-cols-2 lg:grid-cols-4 feature-card-container">
+                {techFeatures.map((feature, index) => (
+                    <TechFeatureCard
+                        key={feature.title}
+                        icon={feature.icon}
+                        title={feature.title}
+                        description={feature.description}
+                        animationDelay={`${150 * index}ms`}
+                    />
+                ))}
+            </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-20 bg-slate-900/30">
+      {/* Workflow Section */}
+      <section className="pt-12 sm:pt-16 pb-24 sm:pb-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-slate-50">
-              Built for Developers and Teams
-            </h2>
-            <p className="mt-4 text-lg text-slate-400">
-              Everything you need, nothing you don't.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
-            <FeatureCard
-              icon={<BriefcaseIcon className="h-8 w-8 text-indigo-400" />}
-              title="Organize Repositories"
-              description="Group your repositories under organizations to easily manage access and billing for your entire team."
-            />
-            <FeatureCard
-              icon={<ShieldCheckIcon className="h-8 w-8 text-indigo-400" />}
-              title="Secure & Private"
-              description="Control who can see and pull your images with public/private repositories and fine-grained permissions."
-            />
-            <FeatureCard
-              icon={<CodeBracketIcon className="h-8 w-8 text-indigo-400" />}
-              title="Developer Friendly"
-              description="A clean, intuitive UI and a straightforward API make managing your images a breeze. Works with standard Docker commands."
-            />
-          </div>
+            <div className="text-center">
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text animate-shimmer">
+                    Designed for a Modern Workflow
+                </h2>
+                <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-400">
+                    Everything you need to build, secure, and deploy your applications at scale.
+                </p>
+            </div>
+            <div className="mt-20 grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
+                <div className="lg:col-span-2">
+                    <InteractiveWorkflowCard 
+                        {...workflowFeatures[0]} 
+                        className="h-full"
+                    >
+                        <AnimatedCodeSnippet />
+                    </InteractiveWorkflowCard>
+                </div>
+                <div className="grid gap-8 mt-8 lg:mt-0">
+                    <InteractiveWorkflowCard {...workflowFeatures[1]} />
+                    <InteractiveWorkflowCard {...workflowFeatures[2]} />
+                </div>
+            </div>
+        </div>
+      </section>
+      
+      {/* Core Concepts Section */}
+      <section className="relative py-24 sm:py-32 bg-slate-900/70 overflow-hidden">
+        <div className="absolute inset-0 z-0 opacity-[0.03] animate-bg-grid-flow" style={{ backgroundSize: '2.5rem 2.5rem' }}></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div className="text-center lg:text-left">
+                    <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-teal-300 via-sky-400 to-indigo-400 text-transparent bg-clip-text animate-shimmer">
+                        Powerful Core Concepts
+                    </h2>
+                    <p className="mt-6 text-lg text-slate-300/90">
+                        Aerugo is built around a flexible, hierarchical structure that makes managing your software supply chain intuitive and secure.
+                    </p>
+                    <div className="mt-10 relative text-left">
+                        <div className="absolute left-4 top-4 bottom-4 w-px bg-slate-700/50" aria-hidden="true">
+                            <div className="absolute inset-y-0 left-0 w-full animate-flow-line" />
+                        </div>
+                        <div className="space-y-12">
+                            {coreConcepts.map((concept, index) => (
+                                <div key={index} className="relative pl-12">
+                                    <div className="absolute left-0 top-0 w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center border-2 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.4)] transition-all duration-300 hover:scale-110 hover:shadow-[0_0_25px_rgba(14,165,233,0.6)]">
+                                        {concept.icon}
+                                    </div>
+                                    <div className="pl-2">
+                                        <h3 className="font-semibold text-slate-50 text-lg">{concept.title}</h3>
+                                        <p className="text-slate-400 mt-1">{concept.description}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="min-h-[300px] sm:min-h-[400px] flex items-center justify-center">
+                    <DynamicCoreVisual />
+                </div>
+             </div>
         </div>
       </section>
 
-      {/* Auth Section */}
-      <section ref={authSectionRef} className="py-20">
-        <div className="w-full max-w-md mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center text-slate-50 mb-2">
-            {authMode === AuthMode.Login
-              ? "Welcome Back"
-              : "Create Your Account"}
-          </h2>
-          <p className="text-center text-slate-400 mb-8">
-            {authMode === AuthMode.Login
-              ? "Sign in to manage your repositories."
-              : "Join now to start pushing images."}
-          </p>
-
-          <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-8 shadow-2xl shadow-slate-950/50">
-            {authMode === AuthMode.Login ? (
-              <LoginForm onLoginSuccess={onLoginSuccess} />
-            ) : (
-              <RegisterForm onRegisterSuccess={handleRegisterSuccess} />
-            )}
-          </div>
-
-          <div className="text-center mt-6">
-            {authMode === AuthMode.Login ? (
-              <p className="text-slate-400">
-                Don't have an account?{" "}
-                <button
-                  onClick={() => switchMode(AuthMode.Register)}
-                  className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded"
-                >
-                  Sign Up
-                </button>
-              </p>
-            ) : (
-              <p className="text-slate-400">
-                Already have an account?{" "}
-                <button
-                  onClick={() => switchMode(AuthMode.Login)}
-                  className="font-semibold text-indigo-400 hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 rounded"
-                >
-                  Sign In
-                </button>
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* Footer */}
-      <footer className="bg-transparent py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500">
-          <p>
-            &copy; {new Date().getFullYear()} Aerugo Registry. All rights
-            reserved.
-          </p>
-          <div className="mt-2">
-            <Link
-              to="/docs#tos"
-              className="text-sm text-slate-400 hover:text-indigo-400 transition-colors"
-            >
-              Terms of Service
-            </Link>
-          </div>
+      <footer className="relative bg-slate-900/70 border-t border-slate-800/50 overflow-hidden">
+        <div className="absolute inset-0 z-0">
+            <div 
+                className="absolute inset-0 opacity-[0.03] animate-bg-grid-flow" 
+                style={{
+                    backgroundImage: 'linear-gradient(rgba(203, 213, 225, 1) 1px, transparent 1px), linear-gradient(to right, rgba(203, 213, 225, 1) 1px, transparent 1px)',
+                    backgroundSize: '3rem 3rem'
+                }}
+            />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 text-sm">
+                {/* Brand Column */}
+                <div className="col-span-2 md:col-span-4 lg:col-span-2">
+                    <div className="flex items-center space-x-3">
+                        <img src="/components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                        <span className="brand-font text-2xl font-bold text-slate-50">Aerugo</span>
+                    </div>
+                    <p className="mt-4 text-slate-400 max-w-xs">
+                        A modern, secure, and performant container registry built for developers and teams.
+                    </p>
+                </div>
+
+                {/* Links Columns */}
+                <div>
+                    <h3 className="font-semibold text-slate-100 tracking-wider uppercase">Product</h3>
+                    <ul className="mt-4 space-y-3">
+                        <li>
+                            <button onClick={handleDocsClick} className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Introduction
+                            </button>
+                        </li>
+                        <li>
+                            <Link to="/repositories" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Repositories
+                            </Link>
+                        </li>
+                        <li>
+                            <Link to="/organizations" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Organizations
+                            </Link>
+                        </li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 className="font-semibold text-slate-100 tracking-wider uppercase">Resources</h3>
+                    <ul className="mt-4 space-y-3">
+                        <li>
+                            <Link to="/docs-public" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Docs
+                            </Link>
+                        </li>
+                        <li>
+                            <a href="https://github.com/AI-Decenter/Aerugo" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                GitHub
+                            </a>
+                        </li>
+                         <li>
+                            <a href="#" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                API Status
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                 <div>
+                    <h3 className="font-semibold text-slate-100 tracking-wider uppercase">Legal</h3>
+                    <ul className="mt-4 space-y-3">
+                        <li>
+                            <Link to="/docs-public#tos" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Terms of Service
+                            </Link>
+                        </li>
+                        <li>
+                            <a href="#" className="text-slate-400 hover:text-indigo-300 transition-colors">
+                                Privacy Policy
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div className="mt-16 pt-8 border-t border-slate-800/50 flex flex-col sm:flex-row justify-between items-center text-sm text-slate-500">
+                <p>&copy; {new Date().getFullYear()} Aerugo. All rights reserved.</p>
+                <div className="flex items-center space-x-6 mt-4 sm:mt-0">
+                    <a href="https://github.com/AI-Decenter/Aerugo" target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-indigo-400 transition-colors" aria-label="GitHub">
+                        <GithubIcon className="w-6 h-6" />
+                    </a>
+                    <a href="#" className="text-slate-500 hover:text-indigo-400 transition-colors" aria-label="Twitter">
+                        <TwitterIcon className="w-6 h-6" />
+                    </a>
+                    <a href="#" className="text-slate-500 hover:text-indigo-400 transition-colors" aria-label="Discord">
+                        <DiscordIcon className="w-6 h-6" />
+                    </a>
+                </div>
+            </div>
         </div>
       </footer>
     </div>
   );
 };
 
-interface IntroFeatureProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
+const DynamicCoreVisual = () => {
+    return (
+        <div className="relative w-full h-full min-h-[300px] sm:min-h-[400px] flex items-center justify-center">
+            {/* Replace canvas with an image tag for the GIF */}
+            <img 
+                src="https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3h4MDA3eXpqZ3FzbjVqYzJ0dTVvNnoxbGM4eGNpNjdtdW9mNmY0eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/9tA6H1madRvUc/giphy.gif" 
+                alt="Rotating tech globe visualization" 
+                className="absolute inset-0 w-full h-full object-contain opacity-60 mix-blend-screen transform scale-110"
+            />
+        </div>
+    );
+};
+
+const techFeatures = [
+    {
+        icon: <ServerStackIcon className="h-8 w-8 text-sky-300" />,
+        title: "Distributed & Highly Available",
+        description: "Designed to run in a clustered environment with no single point of failure.",
+    },
+    {
+        icon: <UsersIcon className="h-8 w-8 text-sky-300" />,
+        title: "Multi-tenancy",
+        description: "First-class support for users and organizations with granular access control.",
+    },
+    {
+        icon: <CloudIcon className="h-8 w-8 text-sky-300" />,
+        title: "S3-Compatible Backend",
+        description: "Uses any S3-compatible object storage for durability and infinite scalability.",
+    },
+    {
+        icon: <RocketLaunchIcon className="h-8 w-8 text-sky-300" />,
+        title: "Written in Rust",
+        description: "Provides memory safety, concurrency, and performance for a secure, efficient core.",
+    },
+];
+
+const AnimatedCodeSnippet = () => {
+  const codeLines = [
+    '# repository-policy.yaml',
+    'repository: a-team/webapp-frontend',
+    '',
+    '# Access rules define team and user permissions.',
+    'permissions:',
+    "  - team: 'frontend-developers'",
+    "    level: 'read-write'",
+    "  - team: 'platform-engineering'",
+    "    level: 'read-only'",
+  ];
+  const fullCode = codeLines.join('\n');
+  const [displayedCode, setDisplayedCode] = useState('');
+  
+  useEffect(() => {
+    let currentIndex = 0;
+    let timeoutId: number;
+
+    const type = () => {
+        if (currentIndex < fullCode.length) {
+            setDisplayedCode(prev => fullCode.substring(0, currentIndex + 1));
+            currentIndex++;
+            timeoutId = window.setTimeout(type, Math.random() * 20 + 10);
+        } else {
+            timeoutId = window.setTimeout(() => {
+                setDisplayedCode('');
+                currentIndex = 0;
+                type();
+            }, 4000);
+        }
+    };
+
+    timeoutId = window.setTimeout(type, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [fullCode]);
+
+  return (
+    <div className="mt-6 w-full h-80 bg-slate-900/70 rounded-lg border border-slate-700 font-mono text-sm text-indigo-300 overflow-hidden flex flex-col">
+      <div className="flex-shrink-0 bg-slate-800/80 px-4 py-2 flex items-center gap-2 border-b border-slate-700">
+        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+      </div>
+      <div className="p-4 overflow-hidden">
+        <pre className="whitespace-pre-wrap">
+            <code>
+            {displayedCode}
+            <span className="inline-block w-2.5 h-4 bg-indigo-300 animate-blinking-cursor ml-0.5"></span>
+            </code>
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+
+const workflowFeatures = [
+    {
+        icon: <BriefcaseIcon className="h-8 w-8 text-indigo-300" />,
+        title: "Centralized Organizations",
+        description: "Group repositories under organizations for powerful, team-based access control and management.",
+        bgClass: 'animate-bg-grid-flow',
+    },
+    {
+        icon: <ShieldCheckIcon className="h-8 w-8 text-indigo-300" />,
+        title: "Robust Security",
+        description: "Secure your software supply chain with private repositories and granular, role-based permissions.",
+        bgClass: 'animate-bg-shift'
+    },
+    {
+        icon: <CodeBracketIcon className="h-8 w-8 text-indigo-300" />,
+        title: "Seamless Integration",
+        description: "Fully compatible with the Docker CLI and designed to integrate perfectly with your existing CI/CD pipelines.",
+        bgClass: 'animate-bg-lines'
+    }
+];
+
+
+interface TechFeatureCardProps {
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    animationDelay: string;
 }
 
-const IntroFeature: React.FC<IntroFeatureProps> = ({
-  icon,
-  title,
-  description,
-}) => (
-  <div className="flex flex-col items-center text-center">
-    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-slate-800 mb-4 border border-slate-700">
-      {icon}
-    </div>
-    <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
-    <p className="mt-1 text-slate-400">{description}</p>
-  </div>
-);
+const TechFeatureCard: React.FC<TechFeatureCardProps> = ({ icon, title, description, animationDelay }) => {
+    return (
+        <div
+            className="feature-card group relative bg-transparent rounded-xl transition-all duration-300 ease-out opacity-0"
+            style={{ animationDelay }}
+        >
+             <div 
+                className="relative h-full bg-slate-900/50 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden transition-all duration-300 group-hover:bg-slate-800/60 group-hover:border-slate-600 animate-bg-pan"
+             >
+                <div className="relative z-10 p-6 h-full flex flex-col transition-transform duration-300 group-hover:scale-105">
+                    <div className="mb-4 inline-block p-3 bg-slate-800 rounded-lg border border-slate-700 transition-colors duration-300 group-hover:bg-slate-700">
+                        {icon}
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-50">{title}</h3>
+                    <p className="mt-2 text-sm text-slate-400 flex-grow">{description}</p>
+                </div>
+            </div>
+        </div>
+    );
+};
 
-interface FeatureCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
+
+interface InteractiveWorkflowCardProps {
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    bgClass: string;
+    className?: string;
+    children?: React.ReactNode;
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = ({
-  icon,
-  title,
-  description,
-}) => (
-  <div className="flex flex-col items-center text-center p-6 bg-slate-800/70 backdrop-blur-sm rounded-lg border border-slate-700/80 transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-xl hover:shadow-indigo-950/50">
-    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-slate-700/80 mb-4">
-      {icon}
-    </div>
-    <h3 className="text-xl font-semibold text-slate-100">{title}</h3>
-    <p className="mt-2 text-slate-400">{description}</p>
-  </div>
-);
+const InteractiveWorkflowCard: React.FC<InteractiveWorkflowCardProps> = ({ icon, title, description, bgClass, className = '', children }) => {
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        const card = cardRef.current;
+        if (!card) return;
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        card.style.setProperty('--mouse-x', `${x}px`);
+        card.style.setProperty('--mouse-y', `${y}px`);
+    };
+
+    return (
+        <div
+            ref={cardRef}
+            onMouseMove={handleMouseMove}
+            className={`group relative p-8 bg-slate-900 rounded-xl border border-slate-700/80 transition-all duration-300 hover:border-indigo-500/50 hover:bg-slate-900/80 overflow-hidden ${className}`}
+        >
+            <div 
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                style={{
+                    background: `radial-gradient(350px circle at var(--mouse-x) var(--mouse-y), rgba(79, 70, 229, 0.15), transparent 80%)`,
+                }}
+            />
+            <div className={`absolute -inset-px z-0 opacity-20 group-hover:opacity-30 transition-opacity duration-300 ${bgClass}`} />
+            
+            <div className="relative z-10 flex flex-col items-start h-full">
+                <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-lg transition-colors duration-300 group-hover:bg-slate-700/50">
+                    {icon}
+                </div>
+                <h3 className="text-xl font-semibold text-slate-100">{title}</h3>
+                <p className="mt-2 text-slate-400">{description}</p>
+                {children}
+            </div>
+        </div>
+    );
+};
+
 
 export default AuthPage;

@@ -1,5 +1,5 @@
 {
-  "name": "Aerugo Registry UI",
-  "description": "A web interface for the Aerugo container registry, allowing management of organizations, repositories, and members.",
+  "name": "Aerugo",
+  "description": "A modern, secure, and performant container registry built for developers and teams.",
   "requestFramePermissions": []
 }

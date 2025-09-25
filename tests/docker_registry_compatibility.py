@@ -171,7 +171,7 @@ class DockerRegistryCompatibilityTester:
         
         try:
             # Create test data
-            test_data = b"Hello from Aerugo Registry compatibility test!"
+            test_data = b"Hello from Aerugo  compatibility test!"
             digest_sha256 = hashlib.sha256(test_data).hexdigest()
             expected_digest = f"sha256:{digest_sha256}"
             

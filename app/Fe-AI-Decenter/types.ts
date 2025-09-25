@@ -1,12 +1,13 @@
+// Fix: Replaced incorrect file content with proper type definitions.
 export enum AuthMode {
-  Login = "login",
-  Register = "register",
+  Login = 'login',
+  Register = 'register',
 }
 
 export enum OrganizationRole {
-  Owner = "Owner",
-  Admin = "Admin",
-  Member = "Member",
+  Owner = 'Owner',
+  Admin = 'Admin',
+  Member = 'Member',
 }
 
 export interface User {
@@ -15,6 +16,7 @@ export interface User {
   email: string;
 }
 
+// FIX: Replaced LoginRequest and RegisterRequest with a single AuthRequest type for consistency as requested by the user.
 export interface AuthRequest {
   username?: string;
   email: string;
@@ -32,7 +34,7 @@ export interface ForgotPasswordRequest {
 }
 
 export interface VerifyOtpRequest {
-  email: string;
+  email:string;
   otp_code: string;
   new_password: string;
   confirm_password: string;
@@ -43,7 +45,6 @@ export interface Organization {
   name: string;
   display_name: string;
   description: string | null;
-  avatar_url: string | null;
   website_url: string | null;
   created_at?: string;
   updated_at?: string;
@@ -52,15 +53,13 @@ export interface Organization {
 export interface CreateOrganizationRequest {
   name: string;
   display_name: string;
-  description: string | null;
-  avatar_url?: string | null;
-  website_url?: string | null;
+  description: string;
+  website_url?: string;
 }
 
 export interface UpdateOrganizationRequest {
   display_name: string;
   description: string;
-  avatar_url?: string;
   website_url?: string;
 }
 
@@ -90,16 +89,34 @@ export interface Repository {
 }
 
 export interface CreateRepositoryRequest {
-  name: string;
+  name:string;
   description: string | null;
   is_public: boolean;
 }
 
 export interface UpdateRepositoryRequest {
-  name: string;
-  description: string | null;
-  is_public: boolean;
+    name: string;
+    description: string | null;
+    is_public: boolean;
 }
+
+export interface ImageLayer {
+  digest: string;
+  size: string;
+}
+
+export interface ImageHistoryItem {
+  command: string;
+  details: string;
+}
+
+export interface ImageConfig {
+  created: string;
+  dockerVersion: string;
+  osArch: string;
+  labels: Record<string, string>;
+}
+
 
 export interface ImageTag {
   name: string;
@@ -107,7 +124,12 @@ export interface ImageTag {
   osArch: string;
   size: string;
   pushedAt: string;
+  // Detailed information for the tag detail view
+  config: ImageConfig;
+  layers: ImageLayer[];
+  history: ImageHistoryItem[];
 }
+
 
 export interface UserPermission {
   user_id: number;
@@ -124,4 +146,14 @@ export interface RepositoryDetailsResponse {
   tags: ImageTag[];
   user_permissions: UserPermission[];
   org_permissions: OrgPermission[];
+}
+
+// FIX: Added missing Webhook type to fix compilation error in RepositoryWebhooks.tsx
+export interface Webhook {
+  id: number;
+  url: string;
+  lastDelivery?: {
+      status: 'success' | 'failed';
+      timestamp: string;
+  };
 }

@@ -1,6 +1,7 @@
 FROM alpine:latest
-RUN echo "=== AERUGO REGISTRY TEST ===" > /test-result.txt
+RUN echo "=== AERUGO STORJ TEST ===" > /test-result.txt
 RUN echo "Push Date: $(date)" >> /test-result.txt
-RUN echo "Registry: localhost:8080" >> /test-result.txt
+RUN echo "Storage: Storj Gateway" >> /test-result.txt
+RUN echo "Registry: localhost:8081" >> /test-result.txt
 RUN echo "Status: SUCCESS" >> /test-result.txt
 CMD cat /test-result.txt

@@ -138,7 +138,7 @@ FROM alpine:latest
 LABEL maintainer="aerugo-e2e-test"
 LABEL test.version="1.0"
 LABEL registry.test="true"
-RUN echo "Hello from Aerugo Registry E2E Test" > /hello.txt
+RUN echo "Hello from Aerugo  E2E Test" > /hello.txt
 RUN echo "Timestamp: \$(date)" >> /hello.txt
 CMD ["cat", "/hello.txt"]
 EOF
@@ -162,7 +162,7 @@ test_registry_api() {
     echo_info "Testing Registry V2 API..."
     
     # Test base API
-    if curl -s "http://${REGISTRY_URL}/v2/" | grep -q "Aerugo Registry"; then
+    if curl -s "http://${REGISTRY_URL}/v2/" | grep -q "Aerugo "; then
         echo_info "✓ Registry V2 base API working"
     else
         echo_error "❌ Registry V2 base API failed"
@@ -215,7 +215,7 @@ test_docker_pull() {
     
     # Test running the pulled image
     echo_info "Testing pulled image execution..."
-    if docker run --rm "${REGISTRY_URL}/${TEST_IMAGE}:${TEST_TAG}" | grep -q "Hello from Aerugo Registry"; then
+    if docker run --rm "${REGISTRY_URL}/${TEST_IMAGE}:${TEST_TAG}" | grep -q "Hello from Aerugo "; then
         echo_info "✓ Pulled image runs correctly"
     else
         echo_error "❌ Pulled image execution failed"

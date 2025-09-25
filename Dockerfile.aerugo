@@ -1,4 +1,4 @@
-# Multi-stage build for Aerugo Registry
+# Multi-stage build for Aerugo 
 FROM rustlang/rust:nightly as builder
 
 # Install build dependencies including Node.js

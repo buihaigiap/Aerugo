@@ -1,17 +1,17 @@
-import React, { useState } from "react";
-import Input from "./Input";
-import Button from "./Button";
-import { registerUser } from "../services/api";
+import React, { useState } from 'react';
+import Input from './Input';
+import Button from './Button';
+import { registerUser } from '../services/api';
 
 interface RegisterFormProps {
   onRegisterSuccess: () => void;
 }
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -20,19 +20,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-
+    
     if (!username || !email || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
+      setError('Please fill in all fields.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError('Passwords do not match.');
       return;
     }
-
+    
     if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+      setError('Password must be at least 8 characters long.');
       return;
     }
 
@@ -40,15 +40,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegisterSuccess }) => {
 
     try {
       await registerUser({ username, email, password });
-      setSuccess("Registration successful! Please sign in.");
-      setTimeout(() => {
-        onRegisterSuccess();
-      }, 1500);
+      setSuccess('Registration successful! Redirecting to sign in...');
+      onRegisterSuccess();
     } catch (err: any) {
       if (err.status === 409) {
-        setError("A user with that username or email already exists.");
+        setError('A user with that username or email already exists.');
       } else {
-        setError("An unexpected error occurred. Please try again.");
+        setError('An unexpected error occurred. Please try again.');
       }
       console.error(err);
     } finally {

@@ -1,85 +1,83 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { AerugoIcon } from "../components/icons/DockerIcon";
-import Input from "../components/Input";
-import Button from "../components/Button";
-import { forgotPassword } from "../services/api";
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import Input from '../components/Input';
+import Button from '../components/Button';
+import { forgotPassword } from '../services/api';
+import AnimatedParticleBackground from '../components/AnimatedParticleBackground';
+import AuthCard from '../components/AuthCard';
 
 const ForgotPasswordPage: React.FC = () => {
-  const [email, setEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setError(null);
 
-    if (!email) {
-      setError("Please enter your email address.");
-      return;
-    }
+        if (!email) {
+            setError('Please enter your email address.');
+            return;
+        }
 
-    setIsLoading(true);
-    try {
-      await forgotPassword({ email });
-      navigate("/verify-otp", { state: { email } });
-    } catch (err: any) {
-      if (err.status === 404) {
-        setError("No account found with that email address.");
-      } else {
-        setError("An error occurred. Please try again later.");
-      }
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        setIsLoading(true);
+        try {
+            await forgotPassword({ email });
+            // On success, navigate to the OTP page with the email in state
+            navigate('/verify-otp', { state: { email } });
+        } catch (err: any) {
+            if (err.status === 404) {
+               setError("No account found with that email address.");
+            } else {
+               setError("An error occurred. Please try again later.");
+            }
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-slate-100 font-sans flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-block">
-            <AerugoIcon className="w-12 h-12 text-indigo-400" />
-          </Link>
+    return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex items-center justify-center p-4 relative overflow-hidden">
+            <AnimatedParticleBackground />
+            <div className="relative z-10 w-full max-w-md">
+                <div className="text-center mb-8">
+                    <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
+                        <img src="/components/icons/logo.png" alt="Aerugo Logo" className="w-24 h-24" />
+                    </Link>
+                </div>
+                
+                <AuthCard
+                    title="Forgot Password?"
+                    subtitle="Enter your email and we'll send you a 6-digit code."
+                >
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <Input
+                            id="forgot-email"
+                            type="email"
+                            label="Email Address"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            disabled={isLoading}
+                            autoComplete="email"
+                        />
+                        {error && <p className="text-sm text-red-500">{error}</p>}
+                        <Button type="submit" isLoading={isLoading}>
+                            Send Code
+                        </Button>
+                    </form>
+                </AuthCard>
+
+                <div className="text-center mt-8">
+                    <Link to="/login" className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
+                        &larr; Back to Sign In
+                    </Link>
+                </div>
+            </div>
         </div>
-
-        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-8 shadow-2xl shadow-slate-950/50">
-          <h2 className="text-2xl font-bold text-center text-slate-50 mb-2">
-            Forgot Password?
-          </h2>
-          <p className="text-center text-slate-400 mb-8">
-            Enter your email and we'll send you a 6-digit code.
-          </p>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <Input
-              id="forgot-email"
-              type="email"
-              label="Email Address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              disabled={isLoading}
-              autoComplete="email"
-            />
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" isLoading={isLoading}>
-              Send Code
-            </Button>
-          </form>
-        </div>
-        <div className="text-center mt-6">
-          <Link
-            to="/"
-            className="font-semibold text-indigo-400 hover:text-indigo-300"
-          >
-            Back to Sign In
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ForgotPasswordPage;

@@ -290,7 +290,7 @@ backup_data() {
 
 # Deploy application
 deploy_application() {
-    print_step "Deploying Aerugo Registry with performance optimizations..."
+    print_step "Deploying Aerugo  with performance optimizations..."
     
     # Build production image
     print_step "Building production Docker image..."
@@ -305,7 +305,7 @@ deploy_application() {
     sleep 30
     
     # Start main application
-    print_step "Starting Aerugo Registry application..."
+    print_step "Starting Aerugo  application..."
     docker-compose -f "$COMPOSE_FILE" up -d aerugo-registry
     
     # Start supporting services
@@ -364,7 +364,7 @@ verify_deployment() {
 print_deployment_info() {
     echo -e "${GREEN}"
     echo "================================================="
-    echo "   🎉 Aerugo Registry Deployment Complete!"
+    echo "   🎉 Aerugo  Deployment Complete!"
     echo "================================================="
     echo -e "${NC}"
     echo "🌐 Registry API: https://localhost/v2/"

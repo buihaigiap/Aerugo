@@ -236,7 +236,7 @@ impl Settings {
                 smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_else(|_| "".to_string()),
                 smtp_password: Secret::new(std::env::var("SMTP_PASSWORD").unwrap_or_else(|_| "".to_string())),
                 from_email: std::env::var("FROM_EMAIL").unwrap_or_else(|_| "noreply@localhost".to_string()),
-                from_name: std::env::var("FROM_NAME").unwrap_or_else(|_| "Aerugo Registry".to_string()),
+                from_name: std::env::var("FROM_NAME").unwrap_or_else(|_| "Aerugo ".to_string()),
                 use_tls: std::env::var("SMTP_USE_TLS")
                     .ok()
                     .and_then(|s| s.parse().ok())

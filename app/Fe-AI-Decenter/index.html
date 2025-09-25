@@ -2,45 +2,258 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔷</text></svg>"
-    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔷</text></svg>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aerugo Registry</title>
-    <style>
-      @keyframes fade-in-up {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-      .animate-fade-in-up {
-        animation: fade-in-up 0.4s ease-out forwards;
-      }
+    <title>Aerugo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@700;800&display=swap" rel="stylesheet">
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.1.1",
+    "react-dom/client": "https://esm.sh/react-dom@19.1.1/client",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.25.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "axios": "https://esm.sh/axios@1.7.2"
+  }
+}
+</script>
+  <style>
+    .brand-font {
+      font-family: 'Exo 2', sans-serif;
+    }
 
-      @keyframes fade-in-scale-up {
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+      animation: fade-in-up 0.4s ease-out forwards;
+    }
+    
+    @keyframes fade-in-scale-up {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1.0); }
+    }
+    .animate-fade-in-scale-up {
+        animation: fade-in-scale-up 0.2s ease-out forwards;
+    }
+
+    .feature-card-container.is-visible .feature-card {
+        animation: card-enter 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+    
+    @keyframes card-enter {
         from {
-          opacity: 0;
-          transform: scale(0.95);
+            opacity: 0;
+            transform: translateY(50px) scale(0.95);
         }
         to {
-          opacity: 1;
-          transform: scale(1);
+            opacity: 1;
+            transform: translateY(0) scale(1);
         }
-      }
-      .animate-fade-in-scale-up {
-        animation: fade-in-scale-up 0.2s ease-out forwards;
-      }
-    </style>
-  </head>
-  <body
-    class="bg-slate-900 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30"
-  >
+    }
+    
+    @keyframes shimmer {
+      0% { background-position: 200% center; }
+      100% { background-position: -200% center; }
+    }
+    .animate-shimmer {
+        background-size: 200% auto;
+        animation: shimmer 5s linear infinite;
+    }
+
+    /* New styles for Introduction section */
+    @keyframes scroll-grid {
+      from { transform: translate(0, 0); }
+      to { transform: translate(-4rem, 4rem); }
+    }
+    .animate-scroll-grid {
+      animation: scroll-grid 10s linear infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 0.2; }
+      50% { transform: scale(1.3); opacity: 0.35; }
+    }
+    .animate-pulse-glow {
+      animation: pulse-glow 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    @keyframes running-lights-vertical {
+        from { background-position: 0 -8rem; }
+        to { background-position: 0 8rem; }
+    }
+    .animate-running-lights-vertical {
+        background-image: repeating-linear-gradient(
+            transparent 0,
+            transparent 3.95rem,
+            rgba(56, 189, 248, 0.3) 4rem,
+            transparent 4.05rem
+        );
+        background-size: 100% 8rem;
+        animation: running-lights-vertical 5s linear infinite;
+        opacity: 0.2;
+    }
+
+    @keyframes running-lights-horizontal {
+        from { background-position: -8rem 0; }
+        to { background-position: 8rem 0; }
+    }
+    .animate-running-lights-horizontal {
+        background-image: repeating-linear-gradient(
+            90deg,
+            transparent 0,
+            transparent 3.95rem,
+            rgba(56, 189, 248, 0.3) 4rem,
+            transparent 4.05rem
+        );
+        background-size: 8rem 100%;
+        animation: running-lights-horizontal 7s linear infinite;
+        opacity: 0.2;
+    }
+    
+    @keyframes bg-pan {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .animate-bg-pan {
+        background-image: linear-gradient(
+            90deg, 
+            transparent, 
+            rgba(56, 189, 248, 0.08),
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: background-pan 12s ease-in-out infinite;
+    }
+    
+    @keyframes bg-grid-flow {
+      from { background-position: 0 0; }
+      to { background-position: 4rem 4rem; }
+    }
+    .animate-bg-grid-flow {
+        background-image:
+            linear-gradient(rgba(203, 213, 225, 0.05) 1px, transparent 1px),
+            linear-gradient(to right, rgba(203, 213, 225, 0.05) 1px, transparent 1px);
+        background-size: 2rem 2rem;
+        animation: bg-grid-flow 20s linear infinite;
+    }
+
+    @keyframes bg-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    .animate-bg-shift {
+        background-image: linear-gradient(90deg, transparent, rgba(79, 70, 229, 0.1), transparent);
+        background-size: 300% 100%;
+        animation: bg-shift 12s ease-in-out infinite;
+    }
+
+    @keyframes bg-lines {
+      from { background-position: 0 0; }
+      to { background-position: 56px 0; }
+    }
+    .animate-bg-lines {
+      background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 28px);
+      animation: bg-lines 4s linear infinite;
+    }
+
+    @keyframes subtle-pulse {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+    .animate-subtle-pulse {
+      animation: subtle-pulse 4s ease-in-out infinite;
+    }
+
+    /* Hub and Spoke Diagram Animations */
+    @keyframes diagram-rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .animate-diagram-rotate {
+        animation: diagram-rotate 120s linear infinite;
+    }
+
+    @keyframes pulse-hub {
+        0%, 100% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.1); opacity: 1; }
+    }
+    .animate-pulse-hub {
+        transform-origin: 50% 50%;
+        animation: pulse-hub 6s ease-in-out infinite;
+    }
+
+    @keyframes pulse-spoke-line {
+        0%, 100% { stroke-opacity: 0.2; }
+        50% { stroke-opacity: 0.8; }
+    }
+    .animate-pulse-spoke-line {
+        animation: pulse-spoke-line 3s ease-in-out infinite;
+    }
+
+    @keyframes float-node {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(1px, -1px); }
+        50% { transform: translate(0, 1px); }
+        75% { transform: translate(-1px, 0); }
+    }
+    .animate-float-node {
+        transform-origin: 50% 50%;
+        animation: float-node 8s ease-in-out infinite;
+    }
+    
+    @keyframes blinking-cursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .animate-blinking-cursor {
+      animation: blinking-cursor 1s step-end infinite;
+    }
+
+    @keyframes flow-line-bg {
+      from { background-position: 50% -100%; }
+      to { background-position: 50% 200%; }
+    }
+    .animate-flow-line {
+        background-image: linear-gradient(
+            transparent 0%,
+            rgba(14, 165, 233, 0.8) 40%,
+            rgba(14, 165, 233, 0.8) 60%,
+            transparent 100%
+        );
+        background-size: 1px 200%;
+        background-repeat: no-repeat;
+        animation: flow-line-bg 4s linear infinite;
+    }
+
+    /* Auth Card Styles */
+    @keyframes border-pan {
+      from { background-position: 0% center; }
+      to { background-position: 200% center; }
+    }
+    .auth-card-animated-border {
+        position: absolute;
+        inset: 0;
+        border-radius: 0.8rem; /* slightly larger than card */
+        background: linear-gradient(115deg, transparent, #4f46e5, #a855f7, #4f46e5, transparent);
+        background-size: 250% auto;
+        animation: border-pan 8s linear infinite;
+    }
+
+    .auth-card-spotlight {
+        background: radial-gradient(350px circle at var(--mouse-x) var(--mouse-y), rgba(99, 102, 241, 0.15), transparent 80%);
+    }
+
+  </style>
+</head>
+  <body class="bg-slate-900 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
