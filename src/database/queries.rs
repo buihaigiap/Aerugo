@@ -14,14 +14,27 @@ pub async fn create_blob_upload(
 ) -> Result<BlobUpload> {
     info!("🔧 Creating blob upload: uuid={}, repository_id={}, user_id={:?}", uuid, repository_id, user_id);
     
+    // Convert user_id string to i64 if present
+    let user_id_int: Option<i64> = match user_id {
+        Some(id_str) => {
+            // Extract numeric part from user_id like "user_12345" -> 12345
+            if id_str.starts_with("user_") {
+                id_str[5..].parse().ok()
+            } else {
+                id_str.parse().ok()
+            }
+        }
+        None => None,
+    };
+    
     let result = sqlx::query_as::<_, BlobUpload>(
         "INSERT INTO blob_uploads (uuid, repository_id, user_id)
          VALUES ($1, $2, $3)
-         RETURNING id, uuid, repository_id, user_id, created_at, completed_at",
+         RETURNING id, uuid, repository_id, user_id, created_at",
     )
     .bind(uuid)
     .bind(repository_id)
-    .bind(user_id)
+    .bind(user_id_int)
     .fetch_one(pool)
     .await;
     

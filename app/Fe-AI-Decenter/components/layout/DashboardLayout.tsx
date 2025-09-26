@@ -8,6 +8,7 @@ import { LogoutIcon } from '../icons/LogoutIcon';
 import { GithubIcon } from '../icons/GithubIcon';
 import { TwitterIcon } from '../icons/TwitterIcon';
 import { DiscordIcon } from '../icons/DiscordIcon';
+import logoImage from '../icons/logo.png';
 
 interface DashboardLayoutProps {
   currentUser: User;
@@ -44,7 +45,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ currentUser, onLogout
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4 lg:space-x-8">
               <Link to="/" className="flex items-center space-x-3 flex-shrink-0">
-                <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px]" />
                 <h1 className="brand-font text-3xl font-bold text-slate-50 hidden md:block tracking-wider">Aerugo</h1>
               </Link>
               <div className="flex items-center space-x-2 sm:space-x-4">

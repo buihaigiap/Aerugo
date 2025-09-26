@@ -121,6 +121,10 @@ impl Storage for FilesystemStorage {
 
         Ok(())
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl StorageConfig for FilesystemConfig {

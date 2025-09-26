@@ -1604,9 +1604,9 @@ async fn get_manifest_impl(
             println!("✅ Found manifest in database: digest={}, media_type={}, size={}", digest, media_type, size);
             
             // Try to retrieve the actual manifest content from S3 storage first
-            // Extract repository name (last part after /) for storage key
-            let repo_name = name.split('/').last().unwrap_or(name);
-            let manifest_blob_key = format!("blobs/{}/{}", repo_name, digest);
+            // Use simplified path structure
+            let repo_full_name = name; // Use full name like "testorg1/step-test" 
+            let manifest_blob_key = format!("{}/{}", repo_full_name, digest);
             let manifest_content = match state.storage.get_blob(&manifest_blob_key).await {
                 Ok(Some(content)) => {
                     println!("✅ Retrieved manifest content from S3: {} bytes", content.len());
@@ -2034,13 +2034,16 @@ async fn put_manifest_impl(
         }
     };
 
-    // Store manifest content in S3 storage as a blob (exact bytes as received)
-    // Extract repository name (last part after /) for storage key
-    let repo_name = name.split('/').last().unwrap_or(name);
-    let manifest_blob_key = format!("blobs/{}/{}", repo_name, digest);  // Organize by repository
+    // Store manifest content in S3 storage as a blob (simplified structure)
+    // Just use organization/repository structure - no extra folders
+    let repo_full_name = name; // Use full name like "testorg1/step-test"
+    let manifest_blob_key = format!("{}/{}", repo_full_name, digest);
+    
+    // No need to create complex folder structure
+    
     let _s3_success = match state.storage.put_blob(&manifest_blob_key, Bytes::from(body.clone())).await {
         Ok(_) => {
-            println!("✅ Manifest content stored in S3 blobs folder: {}", manifest_blob_key);
+            println!("✅ Manifest content stored in S3: {}", manifest_blob_key);
             true
         },
         Err(e) => {
@@ -2148,10 +2151,10 @@ async fn get_blob_impl(
 ) -> impl IntoResponse {
     println!("Getting blob for {}/{}", name, digest);
     
-    // Try to get blob from S3 storage first
-    // Extract repository name (last part after /) for storage key
-    let repo_name = name.split('/').last().unwrap_or(name);
-    let blob_key = format!("blobs/{}/{}", repo_name, digest);
+    // Try to get blob from S3 storage first  
+    // Use simplified path structure
+    let repo_full_name = name; // Use full name like "testorg1/step-test"
+    let blob_key = format!("{}/{}", repo_full_name, digest);
     match state.storage.get_blob(&blob_key).await {
         Ok(Some(data)) => {
             println!("Found blob in S3: {} bytes", data.len());
@@ -2498,9 +2501,9 @@ async fn upload_blob_chunk_impl(
     println!("Chunk size: {}", body.len());
     
     // Store chunk data in temporary storage keyed by upload UUID
-    // Extract repository name (last part after /) for storage key
-    let repo_name = name.split('/').last().unwrap_or(name);
-    let temp_key = format!("uploads/{}/{}", repo_name, uuid);
+    // Use full repository name for consistent storage organization
+    let repo_full_name = name; // Use full name like "testorg1/folder-test"
+    let temp_key = format!("repositories/{}/uploads/{}", repo_full_name, uuid);
     let body_len = body.len();
     
     match state.storage.put_blob(&temp_key, body).await {
@@ -2538,14 +2541,13 @@ async fn complete_blob_upload_impl(
     println!("Expected digest: {}", digest);
     println!("Final chunk size: {}", body.len());
     
-    // Final blob key in S3 - organize by repository name
-    // Extract repository name (last part after /) for storage key
-    let repo_name = name.split('/').last().unwrap_or(name);
-    let blob_key = format!("blobs/{}/{}", repo_name, digest);
+    // Final blob key in S3 - simplified structure
+    let repo_full_name = name; // Use full name like "testorg1/step-test" 
+    let blob_key = format!("{}/{}", repo_full_name, digest);
     
     // If there's a final chunk, append it to the existing data
     if !body.is_empty() {
-        let temp_key = format!("uploads/{}/{}", repo_name, uuid);
+        let temp_key = format!("repositories/{}/uploads/{}", repo_full_name, uuid);
         
         // Get existing data from temp storage
         let existing_data = match state.storage.get_blob(&temp_key).await {
@@ -2593,7 +2595,7 @@ async fn complete_blob_upload_impl(
         }
     } else {
         // No final chunk, just move temp data to final location
-        let temp_key = format!("uploads/{}/{}", repo_name, uuid);
+        let temp_key = format!("repositories/{}/uploads/{}", repo_full_name, uuid);
         
         match state.storage.get_blob(&temp_key).await {
             Ok(Some(data)) => {

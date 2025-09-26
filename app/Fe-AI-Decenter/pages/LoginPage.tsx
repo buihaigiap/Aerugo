@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import LoginForm from '../components/LoginForm';
 import AnimatedParticleBackground from '../components/AnimatedParticleBackground';
 import AuthCard from '../components/AuthCard';
+import logoImage from '../components/icons/logo.png';
 
 interface LoginPageProps {
   onLoginSuccess: (token: string) => void;
@@ -15,7 +16,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
-            <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+            <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px]" />
           </Link>
         </div>
 

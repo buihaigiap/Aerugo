@@ -48,6 +48,9 @@ pub trait Storage: Send + Sync + 'static {
 
     /// Perform a health check on the storage backend
     async fn health_check(&self) -> Result<()>;
+
+    /// Convert to Any for downcasting to specific storage types
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Storage configuration trait that must be implemented by all storage providers

@@ -8,6 +8,7 @@ import { BriefcaseIcon } from '../components/icons/BriefcaseIcon';
 import { ServerStackIcon } from '../components/icons/ServerStackIcon';
 import { TerminalIcon } from '../components/icons/TerminalIcon';
 import { ShieldExclamationIcon } from '../components/icons/ShieldExclamationIcon';
+import logoImage from '../components/icons/logo.png';
 
 const navItems = [
     { id: 'introduction', label: 'Introduction', icon: <InformationCircleIcon className="w-5 h-5" /> },
@@ -125,7 +126,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                 <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/80 backdrop-blur-lg sticky top-0 z-40 border-b border-slate-800">
                     <nav className="flex items-center justify-between max-w-7xl mx-auto">
                         <Link to="/" className="flex items-center space-x-3 group">
-                            <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
+                            <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
                             <span className="brand-font text-3xl font-bold tracking-wider bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text">Aerugo</span>
                         </Link>
                         <div className="flex items-center gap-x-2 sm:gap-x-4">
@@ -161,8 +162,8 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                                                     href={`#${item.id}`}
                                                     onClick={(e) => handleNavClick(e, item.id)}
                                                     className={`flex items-center gap-x-3 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 border-l-4 ${isActive
-                                                            ? `${sectionStyles[item.id]?.accent || 'border-indigo-400'} bg-white/5 text-slate-50`
-                                                            : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                                        ? `${sectionStyles[item.id]?.accent || 'border-indigo-400'} bg-white/5 text-slate-50`
+                                                        : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
                                                         }`}
                                                 >
                                                     <span className={`transition-colors ${isActive ? sectionStyles[item.id]?.icon || 'text-indigo-400' : 'text-slate-500'}`}>

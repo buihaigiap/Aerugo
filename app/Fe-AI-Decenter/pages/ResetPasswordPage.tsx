@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import logoImage from '../components/icons/logo.png';
 
 const ResetPasswordPage: React.FC = () => {
     const { token } = useParams<{ token: string }>();
@@ -53,7 +54,7 @@ const ResetPasswordPage: React.FC = () => {
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
                     <Link to="/" className="inline-block">
-                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                        <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px]" />
                     </Link>
                 </div>
 

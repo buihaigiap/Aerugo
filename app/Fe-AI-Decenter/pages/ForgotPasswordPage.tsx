@@ -5,6 +5,7 @@ import Button from '../components/Button';
 import { forgotPassword } from '../services/api';
 import AnimatedParticleBackground from '../components/AnimatedParticleBackground';
 import AuthCard from '../components/AuthCard';
+import logoImage from '../components/icons/logo.png';
 
 const ForgotPasswordPage: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -44,7 +45,7 @@ const ForgotPasswordPage: React.FC = () => {
             <div className="relative z-10 w-full max-w-md">
                 <div className="text-center mb-8">
                     <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
-                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="w-24 h-24" />
+                        <img src={logoImage} alt="Aerugo Logo" className="w-24 h-24" />
                     </Link>
                 </div>
 

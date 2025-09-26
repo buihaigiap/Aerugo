@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import RegisterForm from '../components/RegisterForm';
 import AnimatedParticleBackground from '../components/AnimatedParticleBackground';
 import AuthCard from '../components/AuthCard';
+import logoImage from '../components/icons/logo.png';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ const RegisterPage: React.FC = () => {
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
-            <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+            <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px]" />
           </Link>
         </div>
 

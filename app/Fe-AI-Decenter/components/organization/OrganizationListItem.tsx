@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Organization } from '../../types';
+import logoImage from '../icons/logo.png';
 
 interface OrganizationListItemProps {
     organization: Organization;
@@ -25,7 +26,7 @@ const OrganizationListItem: React.FC<OrganizationListItemProps> = ({ organizatio
                 <div className="flex items-center space-x-3">
                     <div className="flex-shrink-0">
                         <span className="h-8 w-8 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600">
-                            <img src="./components/icons/logo.png" alt="Organization Logo" className="h-[100px] w-[100px]" />
+                            <img src={logoImage} alt="Organization Logo" className="h-[100px] w-[100px]" />
                         </span>
                     </div>
                     <div className="flex-1 text-left min-w-0">

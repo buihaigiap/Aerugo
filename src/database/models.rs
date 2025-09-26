@@ -8,7 +8,7 @@ pub struct BlobUpload {
     pub id: i32,
     pub uuid: String,
     pub repository_id: i64,
-    pub user_id: Option<String>,
+    pub user_id: Option<i64>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -16,7 +16,7 @@ pub struct BlobUpload {
 pub struct NewBlobUpload {
     pub uuid: String,
     pub repository_id: i64,
-    pub user_id: Option<String>,
+    pub user_id: Option<i64>,
 }
 
 // User models

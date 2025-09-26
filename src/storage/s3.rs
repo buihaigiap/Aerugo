@@ -24,6 +24,8 @@ impl S3Storage {
         // Return the key as-is, allowing callers to specify full path structure
         key.to_string()
     }
+
+    // No need for complex folder creation - S3 will handle paths automatically
 }
 
 #[derive(Error, Debug)]
@@ -401,6 +403,10 @@ impl Storage for S3Storage {
             .send()
             .await?;
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

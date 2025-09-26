@@ -8,6 +8,7 @@ import { ShieldCheckIcon } from '../components/icons/ShieldCheckIcon';
 import { CodeBracketIcon } from '../components/icons/CodeBracketIcon';
 import { ServerStackIcon } from '../components/icons/ServerStackIcon';
 import { UsersIcon } from '../components/icons/UsersIcon';
+import logoImage from '../components/icons/logo.png';
 import { CloudIcon } from '../components/icons/CloudIcon';
 import { RocketLaunchIcon } from '../components/icons/RocketLaunchIcon';
 import { GithubIcon } from '../components/icons/GithubIcon';
@@ -70,7 +71,7 @@ const AuthPage: React.FC = () => {
             <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/80 backdrop-blur-lg sticky top-0 z-30 border-b border-slate-800">
                 <nav className="flex items-center justify-between">
                     <Link to="/" className="flex items-center space-x-3 group">
-                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
+                        <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
                         <span className="brand-font text-3xl font-bold tracking-wider bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text">Aerugo</span>
                     </Link>
                     <div className="flex items-center gap-x-2 sm:gap-x-4">
@@ -245,7 +246,7 @@ const AuthPage: React.FC = () => {
                         {/* Brand Column */}
                         <div className="col-span-2 md:col-span-4 lg:col-span-2">
                             <div className="flex items-center space-x-3">
-                                <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                                <img src={logoImage} alt="Aerugo Logo" className="h-[100px] w-[100px]" />
                                 <span className="brand-font text-2xl font-bold text-slate-50">Aerugo</span>
                             </div>
                             <p className="mt-4 text-slate-400 max-w-xs">
