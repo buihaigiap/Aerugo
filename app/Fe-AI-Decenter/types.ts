@@ -1,13 +1,13 @@
 // Fix: Replaced incorrect file content with proper type definitions.
 export enum AuthMode {
-  Login = 'login',
-  Register = 'register',
+  Login = "login",
+  Register = "register",
 }
 
 export enum OrganizationRole {
-  Owner = 'Owner',
-  Admin = 'Admin',
-  Member = 'Member',
+  Owner = "Owner",
+  Admin = "Admin",
+  Member = "Member",
 }
 
 export interface User {
@@ -34,7 +34,7 @@ export interface ForgotPasswordRequest {
 }
 
 export interface VerifyOtpRequest {
-  email:string;
+  email: string;
   otp_code: string;
   new_password: string;
   confirm_password: string;
@@ -89,47 +89,16 @@ export interface Repository {
 }
 
 export interface CreateRepositoryRequest {
-  name:string;
+  name: string;
   description: string | null;
   is_public: boolean;
 }
 
 export interface UpdateRepositoryRequest {
-    name: string;
-    description: string | null;
-    is_public: boolean;
-}
-
-export interface ImageLayer {
-  digest: string;
-  size: string;
-}
-
-export interface ImageHistoryItem {
-  command: string;
-  details: string;
-}
-
-export interface ImageConfig {
-  created: string;
-  dockerVersion: string;
-  osArch: string;
-  labels: Record<string, string>;
-}
-
-
-export interface ImageTag {
   name: string;
-  digest: string;
-  osArch: string;
-  size: string;
-  pushedAt: string;
-  // Detailed information for the tag detail view
-  config: ImageConfig;
-  layers: ImageLayer[];
-  history: ImageHistoryItem[];
+  description: string | null;
+  is_public: boolean;
 }
-
 
 export interface UserPermission {
   user_id: number;
@@ -143,7 +112,7 @@ export interface OrgPermission {
 
 export interface RepositoryDetailsResponse {
   repository: Repository;
-  tags: ImageTag[];
+  tags: string[];
   user_permissions: UserPermission[];
   org_permissions: OrgPermission[];
 }
@@ -153,7 +122,28 @@ export interface Webhook {
   id: number;
   url: string;
   lastDelivery?: {
-      status: 'success' | 'failed';
-      timestamp: string;
+    status: "success" | "failed";
+    timestamp: string;
   };
+}
+
+export interface ApiKey {
+  id: number;
+  name: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  is_active: boolean;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+}
+
+export interface CreateApiKeyResponse {
+  id: number;
+  api_key: string;
+  created_at: string;
+  expires_at: string | null;
+  warning: string;
 }
