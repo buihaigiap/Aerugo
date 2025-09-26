@@ -59,6 +59,10 @@ pub fn docker_registry_v2_router() -> Router<AppState> {
                 .head(docker_registry_v2::head_blob_namespaced)
         )
         
+        // List all blobs in repository (custom API - not Docker Registry V2 standard)
+        .route("/v2/:name/blobs/", get(docker_registry_v2::list_blobs))
+        .route("/v2/:org/:name/blobs/", get(docker_registry_v2::list_blobs_namespaced))
+        
         // Blob upload operations for simple names
         .route("/v2/:name/blobs/uploads/", post(docker_registry_v2::start_blob_upload))
         .route("/v2/:org/:name/blobs/uploads/", post(docker_registry_v2::start_blob_upload_namespaced))

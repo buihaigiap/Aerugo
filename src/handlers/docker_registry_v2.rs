@@ -61,6 +61,22 @@ pub struct RegistryError {
     pub detail: Option<serde_json::Value>,
 }
 
+/// Blob list response for custom list blobs API
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlobListResponse {
+    pub repository: String,
+    pub blobs: Vec<BlobInfo>,
+}
+
+/// Blob information
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlobInfo {
+    pub digest: String,
+    #[serde(rename = "mediaType")]
+    pub media_type: String,
+    pub size: i64,
+}
+
 /// Query parameters for catalog endpoint
 #[derive(Debug, Deserialize)]
 pub struct CatalogQuery {
@@ -2568,6 +2584,23 @@ async fn complete_blob_upload_impl(
                 // Clean up temporary upload
                 let _ = state.storage.delete_blob(&temp_key).await;
                 
+                // Lưu blob metadata vào bảng manifests
+                if let Ok(Some(repository_id)) = crate::database::queries::get_repository_id_by_name(&state.db_pool, name).await {
+                    let media_type = "application/vnd.docker.image.rootfs.diff.tar.gzip".to_string(); // Layer blob
+                    if let Err(e) = sqlx::query!(
+                        "INSERT INTO manifests (repository_id, digest, media_type, size) 
+                         VALUES ($1, $2, $3, $4) 
+                         ON CONFLICT (repository_id, digest) DO NOTHING",
+                        repository_id, digest, media_type, final_size
+                    )
+                    .execute(&state.db_pool)
+                    .await {
+                        println!("⚠️ Failed to store blob metadata: {}", e);
+                    } else {
+                        println!("✅ Blob metadata stored: {}", digest);
+                    }
+                }
+                
                 // Update blob upload status in database
                 if let Err(e) = crate::database::queries::update_blob_upload_completed(
                     &state.db_pool,
@@ -2606,6 +2639,23 @@ async fn complete_blob_upload_impl(
                         
                         // Clean up temporary upload
                         let _ = state.storage.delete_blob(&temp_key).await;
+                        
+                        // Lưu blob metadata vào bảng manifests
+                        if let Ok(Some(repository_id)) = crate::database::queries::get_repository_id_by_name(&state.db_pool, name).await {
+                            let media_type = "application/vnd.docker.image.rootfs.diff.tar.gzip".to_string(); // Layer blob
+                            if let Err(e) = sqlx::query!(
+                                "INSERT INTO manifests (repository_id, digest, media_type, size) 
+                                 VALUES ($1, $2, $3, $4) 
+                                 ON CONFLICT (repository_id, digest) DO NOTHING",
+                                repository_id, digest, media_type, blob_size
+                            )
+                            .execute(&state.db_pool)
+                            .await {
+                                println!("⚠️ Failed to store blob metadata: {}", e);
+                            } else {
+                                println!("✅ Blob metadata stored: {}", digest);
+                            }
+                        }
                         
                         // Update blob upload status in database
                         if let Err(e) = crate::database::queries::update_blob_upload_completed(
@@ -2654,4 +2704,168 @@ async fn cancel_blob_upload_impl(
     println!("Cancelling blob upload for {}/{}", name, uuid);
     
     StatusCode::NO_CONTENT
+}
+
+// List all blobs in repository (custom API)
+#[utoipa::path(
+    get,
+    path = "/v2/{name}/blobs/",
+    tag = "docker-registry-v2",
+    params(
+        ("name" = String, Path, description = "Repository name")
+    ),
+    responses(
+        (status = 200, description = "List of blobs", body = BlobListResponse),
+        (status = 404, description = "Repository not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn list_blobs(
+    State(state): State<AppState>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    list_blobs_impl(&state, &name).await
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/{org}/{name}/blobs/",
+    tag = "docker-registry-v2", 
+    params(
+        ("org" = String, Path, description = "Organization name"),
+        ("name" = String, Path, description = "Repository name")
+    ),
+    responses(
+        (status = 200, description = "List of blobs", body = BlobListResponse),
+        (status = 404, description = "Repository not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearerAuth" = [])
+    )
+)]
+pub async fn list_blobs_namespaced(
+    State(state): State<AppState>,
+    axum::extract::Path((org, name)): axum::extract::Path<(String, String)>,
+) -> impl IntoResponse {
+    let full_name = format!("{}/{}", org, name);
+    list_blobs_impl(&state, &full_name).await
+}
+
+async fn list_blobs_impl(
+    state: &AppState,
+    name: &str,
+) -> impl IntoResponse {
+    println!("🔍 LIST Blobs: {}", name);
+    
+    // Parse repository name (handle org/repo format)
+    let (org_name, repo_name) = if name.contains('/') {
+        let parts: Vec<&str> = name.splitn(2, '/').collect();
+        (Some(parts[0]), parts[1])
+    } else {
+        (None, name)
+    };
+    
+    // Find repository ID
+    let repository_id = if let Some(org) = org_name {
+        // Namespaced repository (org/repo)
+        match sqlx::query!(
+            "SELECT r.id FROM repositories r 
+             JOIN organizations o ON r.organization_id = o.id 
+             WHERE o.name = $1 AND r.name = $2",
+            org, repo_name
+        )
+        .fetch_optional(&state.db_pool)
+        .await
+        {
+            Ok(Some(row)) => row.id,
+            Ok(None) => {
+                println!("❌ Repository {}/{} not found", org, repo_name);
+                return (
+                    StatusCode::NOT_FOUND,
+                    HeaderMap::new(),
+                    Json(serde_json::json!({"error": "repository not found"}))
+                ).into_response();
+            },
+            Err(e) => {
+                println!("❌ Database error: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    Json(serde_json::json!({"error": "database error"}))
+                ).into_response();
+            }
+        }
+    } else {
+        // Simple repository name - look under default organization (id=1)
+        match sqlx::query!(
+            "SELECT id FROM repositories WHERE name = $1 AND organization_id = 1",
+            repo_name
+        )
+        .fetch_optional(&state.db_pool)
+        .await
+        {
+            Ok(Some(row)) => row.id,
+            Ok(None) => {
+                println!("❌ Repository {} not found", repo_name);
+                return (
+                    StatusCode::NOT_FOUND,
+                    HeaderMap::new(),
+                    Json(serde_json::json!({"error": "repository not found"}))
+                ).into_response();
+            },
+            Err(e) => {
+                println!("❌ Database error: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    Json(serde_json::json!({"error": "database error"}))
+                ).into_response();
+            }
+        }
+    };
+    
+    // Get all manifests and their blobs for this repository
+    match sqlx::query!(
+        "SELECT DISTINCT digest, media_type, size FROM manifests WHERE repository_id = $1 ORDER BY digest",
+        repository_id
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    {
+        Ok(rows) => {
+            let blobs: Vec<serde_json::Value> = rows.iter().map(|row| {
+                serde_json::json!({
+                    "digest": row.digest,
+                    "mediaType": row.media_type,
+                    "size": row.size
+                })
+            }).collect();
+            
+            println!("✅ Found {} blobs in repository {}", blobs.len(), name);
+            
+            let mut headers = HeaderMap::new();
+            headers.insert("Content-Type", HeaderValue::from_static("application/json"));
+            
+            (
+                StatusCode::OK,
+                headers,
+                Json(serde_json::json!({
+                    "repository": name,
+                    "blobs": blobs
+                }))
+            ).into_response()
+        },
+        Err(e) => {
+            println!("❌ Database error getting blobs: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                Json(serde_json::json!({"error": "failed to retrieve blobs"}))
+            ).into_response()
+        }
+    }
 }

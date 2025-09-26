@@ -16,7 +16,7 @@ use crate::models::{
     },
     repository::{Repository as RepositoryModel, CreateRepositoryRequest, RepositoryDetailsResponse},
 };
-use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError};
+use crate::handlers::docker_registry_v2::{ApiVersionResponse, CatalogResponse, TagListResponse, BlobUploadResponse, ErrorResponse, RegistryError, BlobListResponse, BlobInfo};
 
 /// Security addon to add Bearer Auth to OpenAPI
 pub struct SecurityAddon;
@@ -92,6 +92,8 @@ impl Modify for SecurityAddon {
         docker_registry_v2::get_upload_status,
         docker_registry_v2::cancel_blob_upload,
         docker_registry_v2::list_tags,
+        docker_registry_v2::list_blobs,
+        docker_registry_v2::list_blobs_namespaced,
     ),
     components(
         schemas(
@@ -139,6 +141,8 @@ impl Modify for SecurityAddon {
             BlobUploadResponse,
             ErrorResponse,
             RegistryError,
+            docker_registry_v2::BlobListResponse,
+            docker_registry_v2::BlobInfo,
         )
     ),
     tags(
