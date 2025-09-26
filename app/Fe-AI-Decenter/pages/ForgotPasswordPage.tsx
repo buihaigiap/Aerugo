@@ -28,9 +28,9 @@ const ForgotPasswordPage: React.FC = () => {
             navigate('/verify-otp', { state: { email } });
         } catch (err: any) {
             if (err.status === 404) {
-               setError("No account found with that email address.");
+                setError("No account found with that email address.");
             } else {
-               setError("An error occurred. Please try again later.");
+                setError("An error occurred. Please try again later.");
             }
             console.error(err);
         } finally {
@@ -44,10 +44,10 @@ const ForgotPasswordPage: React.FC = () => {
             <div className="relative z-10 w-full max-w-md">
                 <div className="text-center mb-8">
                     <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
-                        <img src="/components/icons/logo.png" alt="Aerugo Logo" className="w-24 h-24" />
+                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="w-24 h-24" />
                     </Link>
                 </div>
-                
+
                 <AuthCard
                     title="Forgot Password?"
                     subtitle="Enter your email and we'll send you a 6-digit code."

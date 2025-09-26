@@ -52,13 +52,13 @@ const ResetPasswordPage: React.FC = () => {
         <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-slate-100 font-sans flex items-center justify-center p-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                     <Link to="/" className="inline-block">
-                        <img src="/components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                    <Link to="/" className="inline-block">
+                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
                     </Link>
                 </div>
-                
+
                 <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-8 shadow-2xl shadow-slate-950/50">
-                     {isSuccess ? (
+                    {isSuccess ? (
                         <div className="text-center">
                             <h2 className="text-2xl font-bold text-slate-50 mb-2">Password Reset Successfully!</h2>
                             <p className="text-slate-400">

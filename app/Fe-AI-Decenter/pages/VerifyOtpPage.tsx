@@ -12,7 +12,7 @@ import OtpInput from '../components/OtpInput';
 const VerifyOtpPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    
+
     // Email is passed from the previous page
     const email = location.state?.email;
 
@@ -65,7 +65,7 @@ const VerifyOtpPage: React.FC = () => {
             }, 3000);
         } catch (err: any) {
             if (err.status === 400) {
-                 setError("Invalid or expired OTP. Please try again.");
+                setError("Invalid or expired OTP. Please try again.");
             } else {
                 setError("An error occurred. Please try again later.");
             }
@@ -85,18 +85,18 @@ const VerifyOtpPage: React.FC = () => {
             <AnimatedParticleBackground />
             <div className="relative z-10 w-full max-w-md">
                 <div className="text-center mb-8">
-                     <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
-                        <img src="/components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
+                    <Link to="/" className="inline-block transition-transform duration-300 hover:scale-110">
+                        <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px]" />
                     </Link>
                 </div>
-                
+
                 <AuthCard
-                     title={isSuccess ? "Success!" : "Check Your Email"}
-                     subtitle={isSuccess 
-                        ? "Your password has been reset. Redirecting you to sign in..." 
+                    title={isSuccess ? "Success!" : "Check Your Email"}
+                    subtitle={isSuccess
+                        ? "Your password has been reset. Redirecting you to sign in..."
                         : `We've sent a 6-digit code to ${email}.`}
                 >
-                     {isSuccess ? (
+                    {isSuccess ? (
                         <div className="text-center py-8">
                             {/* Success message is now in the subtitle */}
                         </div>

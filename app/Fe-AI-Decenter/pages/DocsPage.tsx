@@ -83,11 +83,11 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
             if (element) {
                 const elementPosition = element.getBoundingClientRect().top;
                 const offsetPosition = elementPosition + window.pageYOffset - headerHeight;
-                
+
                 const behavior = isInitialMount.current ? 'auto' : 'smooth';
 
                 setTimeout(() => {
-                     window.scrollTo({
+                    window.scrollTo({
                         top: offsetPosition,
                         behavior,
                     });
@@ -109,7 +109,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
     const wrapperClass = isEmbedded
         ? "text-slate-200 font-sans"
         : "min-h-screen bg-slate-900 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30 text-slate-200 font-sans";
-    
+
     const MainWrapper = isEmbedded ? 'div' : 'main';
     const mainWrapperProps = isEmbedded ? {} : { className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" };
 
@@ -118,14 +118,14 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
     const subTitleMargin = isEmbedded ? "mt-1" : "mt-4";
     const sidebarTopClass = isEmbedded ? "lg:top-20" : "lg:top-24";
     const sectionScrollMarginClass = isEmbedded ? "scroll-mt-20" : "scroll-mt-24";
-    
+
     return (
         <div className={wrapperClass}>
             {!isEmbedded && (
                 <header className="py-4 px-4 sm:px-6 lg:px-8 bg-slate-900/80 backdrop-blur-lg sticky top-0 z-40 border-b border-slate-800">
                     <nav className="flex items-center justify-between max-w-7xl mx-auto">
                         <Link to="/" className="flex items-center space-x-3 group">
-                            <img src="/components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
+                            <img src="./components/icons/logo.png" alt="Aerugo Logo" className="h-[100px] w-[100px] transition-transform duration-300 group-hover:scale-110" />
                             <span className="brand-font text-3xl font-bold tracking-wider bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text">Aerugo</span>
                         </Link>
                         <div className="flex items-center gap-x-2 sm:gap-x-4">
@@ -145,7 +145,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                     <h1 className={`${titleClass} tracking-tight bg-gradient-to-r from-slate-100 to-indigo-300 text-transparent bg-clip-text`}>Documentation</h1>
                     <p className={`${subTitleMargin} max-w-2xl mx-auto text-lg text-slate-400`}>Everything you need to know to get started with Aerugo.</p>
                 </div>
-            
+
                 <div className="flex flex-col lg:flex-row gap-12 lg:gap-16 py-12">
                     {/* Sidebar */}
                     <aside className={`lg:w-64 lg:flex-shrink-0 lg:sticky ${sidebarTopClass} self-start z-30`}>
@@ -160,11 +160,10 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                                                 <a
                                                     href={`#${item.id}`}
                                                     onClick={(e) => handleNavClick(e, item.id)}
-                                                    className={`flex items-center gap-x-3 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 border-l-4 ${
-                                                        isActive
-                                                        ? `${sectionStyles[item.id]?.accent || 'border-indigo-400'} bg-white/5 text-slate-50`
-                                                        : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                                                    }`}
+                                                    className={`flex items-center gap-x-3 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 border-l-4 ${isActive
+                                                            ? `${sectionStyles[item.id]?.accent || 'border-indigo-400'} bg-white/5 text-slate-50`
+                                                            : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                                        }`}
                                                 >
                                                     <span className={`transition-colors ${isActive ? sectionStyles[item.id]?.icon || 'text-indigo-400' : 'text-slate-500'}`}>
                                                         {item.icon}
@@ -222,7 +221,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                                 </ol>
                                 <h3>Managing Members & Roles</h3>
                                 <p>Once you've selected an organization, you can manage its members from the "Members" tab. Roles include:</p>
-                                 <ul>
+                                <ul>
                                     <li><strong>Owner:</strong> Full administrative control, including deleting the organization.</li>
                                     <li><strong>Admin:</strong> Can manage repositories and members (except other Owners).</li>
                                     <li><strong>Member:</strong> Can view and (depending on repository settings) push/pull images.</li>
@@ -248,7 +247,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                             <section id="docker-usage" className={sectionScrollMarginClass}>
                                 <h2>Using Docker</h2>
                                 <p>To push and pull images, you'll use the Docker command-line tool. For more details, check out the official GitHub repository: <a href="https://github.com/AI-Decenter/Aerugo" target="_blank" rel="noopener noreferrer">https://github.com/AI-Decenter/Aerugo</a></p>
-                                
+
                                 <h3>1. Log In to the Registry</h3>
                                 <p>First, log in to the Aerugo registry using your account credentials. The interactive method is recommended for security.</p>
                                 <CodeBlock code={`docker login ${REGISTRY_HOST}`} language="bash" />
@@ -261,7 +260,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                                 <CodeBlock code={`docker tag my-local-image:latest ${REGISTRY_HOST}/my-awesome-team/my-app:v1.0`} language="bash" />
                                 <p>After tagging, push the image to the registry.</p>
                                 <CodeBlock code={`docker push ${REGISTRY_HOST}/my-awesome-team/my-app:v1.0`} language="bash" />
-                                
+
                                 <h3>3. Pull an Image</h3>
                                 <p>To pull the image on another machine, use the <code>docker pull</code> command with the same full path.</p>
                                 <CodeBlock code={`docker pull ${REGISTRY_HOST}/my-awesome-team/my-app:v1.0`} language="bash" />
@@ -276,7 +275,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                             <section id="tos" className={sectionScrollMarginClass}>
                                 <h2>Terms of Service</h2>
                                 <p>Last Updated: {new Date().toLocaleDateString()}</p>
-                                
+
                                 <h3>1. Acceptance of Terms</h3>
                                 <p>By accessing or using the Aerugo service ("Service"), you agree to be bound by these Terms of Service ("Terms").</p>
 
@@ -293,7 +292,7 @@ const DocsPage: React.FC<DocsPageProps> = ({ isEmbedded = false }) => {
                     </div>
                 </div>
             </MainWrapper>
-             <style>{`
+            <style>{`
                 .prose-custom h1 {
                     font-size: 2rem;
                     line-height: 2.5rem;

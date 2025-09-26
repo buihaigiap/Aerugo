@@ -78,7 +78,7 @@ const OrganizationDetail: React.FC<OrganizationDetailProps> = ({ token, currentU
       <header className="p-6 border-b border-slate-700/80 flex items-center space-x-5">
         <div className="flex-shrink-0">
             <span className="h-16 w-16 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600">
-                <img src="/components/icons/logo.png" alt="Organization Logo" className="h-[100px] w-[100px]" />
+                <img src="./components/icons/logo.png" alt="Organization Logo" className="h-[100px] w-[100px]" />
             </span>
         </div>
         <div className="flex-1">
