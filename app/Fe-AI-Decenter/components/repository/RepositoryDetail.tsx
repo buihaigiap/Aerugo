@@ -7,11 +7,7 @@ import { CogIcon } from "../icons/CogIcon";
 import { CodeBracketIcon } from "../icons/CodeBracketIcon";
 import { fetchRepositoryDetails } from "../../services/api";
 import { TagIcon } from "../icons/TagIcon";
-import { RssIcon } from "../icons/RssIcon";
-import { ChartBarIcon } from "../icons/ChartBarIcon";
 import RepositoryTags from "./RepositoryTags";
-import RepositoryUsage from "./RepositoryUsage";
-import RepositoryWebhooks from "./RepositoryWebhooks";
 
 interface RepositoryDetailProps {
   token: string;
@@ -20,7 +16,7 @@ interface RepositoryDetailProps {
   onBack: () => void;
 }
 
-type Tab = "tags" | "instructions" | "usage" | "webhooks" | "settings";
+type Tab = "tags" | "instructions" | "settings";
 
 const REGISTRY_HOST = "aerugo.io";
 
@@ -98,18 +94,6 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
             onClick={() => setActiveTab("instructions")}
           />
           <TabButton
-            icon={<ChartBarIcon className="w-5 h-5 mr-2 flex-shrink-0" />}
-            label="Usage"
-            isActive={activeTab === "usage"}
-            onClick={() => setActiveTab("usage")}
-          />
-          <TabButton
-            icon={<RssIcon className="w-5 h-5 mr-2 flex-shrink-0" />}
-            label="Webhooks"
-            isActive={activeTab === "webhooks"}
-            onClick={() => setActiveTab("webhooks")}
-          />
-          <TabButton
             icon={<CogIcon className="w-5 h-5 mr-2 flex-shrink-0" />}
             label="Settings"
             isActive={activeTab === "settings"}
@@ -122,6 +106,9 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
         <div key={activeTab} className="animate-fade-in-up">
           {activeTab === "tags" && (
             <RepositoryTags
+              token={token}
+              organizationName={organizationName}
+              repositoryName={detailedRepo.name}
               repositoryPath={repositoryPath}
               tags={tags}
               isLoading={isLoading}
@@ -177,8 +164,6 @@ const RepositoryDetail: React.FC<RepositoryDetailProps> = ({
               </div>
             </div>
           )}
-          {activeTab === "usage" && <RepositoryUsage />}
-          {activeTab === "webhooks" && <RepositoryWebhooks />}
           {activeTab === "settings" && !isLoading && !error && (
             <RepositorySettings
               token={token}

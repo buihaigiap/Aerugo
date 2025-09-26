@@ -1,21 +1,34 @@
 import React, { useState } from "react";
 import { ClipboardIcon } from "../icons/ClipboardIcon";
 import { TagIcon } from "../icons/TagIcon";
+import RepositoryTagDetail from "./RepositoryTagDetail";
 
 interface RepositoryTagsProps {
+  token: string;
+  organizationName: string;
+  repositoryName: string;
   repositoryPath: string;
   tags: string[];
   isLoading: boolean;
   error: string | null;
 }
 
-const RepositoryTags: React.FC<RepositoryTagsProps> = ({
-  repositoryPath,
-  tags,
-  isLoading,
-  error,
-}) => {
-  if (isLoading) {
+const RepositoryTags: React.FC<RepositoryTagsProps> = (props) => {
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+  if (selectedTag) {
+    return (
+      <RepositoryTagDetail
+        token={props.token}
+        organizationName={props.organizationName}
+        repositoryName={props.repositoryName}
+        tagName={selectedTag}
+        onBack={() => setSelectedTag(null)}
+      />
+    );
+  }
+
+  if (props.isLoading) {
     return (
       <div className="text-center py-10 px-4">
         <p className="text-slate-400">Loading tags...</p>
@@ -23,16 +36,16 @@ const RepositoryTags: React.FC<RepositoryTagsProps> = ({
     );
   }
 
-  if (error) {
+  if (props.error) {
     return (
       <div className="text-center py-10 px-4 border-2 border-dashed border-red-700/50 bg-red-900/20 rounded-lg">
         <h3 className="text-lg font-medium text-red-300">Error Loading Tags</h3>
-        <p className="text-red-400 mt-1">{error}</p>
+        <p className="text-red-400 mt-1">{props.error}</p>
       </div>
     );
   }
 
-  if (!tags || tags.length === 0) {
+  if (!props.tags || props.tags.length === 0) {
     return (
       <div className="text-center py-10 px-4 border-2 border-dashed border-slate-700 rounded-lg">
         <TagIcon className="mx-auto h-12 w-12 text-slate-500" />
@@ -70,11 +83,12 @@ const RepositoryTags: React.FC<RepositoryTagsProps> = ({
             </tr>
           </thead>
           <tbody className="bg-slate-800 divide-y divide-slate-700">
-            {tags.map((tagName) => (
+            {props.tags.map((tagName) => (
               <TagListItem
                 key={tagName}
                 tagName={tagName}
-                repositoryPath={repositoryPath}
+                repositoryPath={props.repositoryPath}
+                onSelectTag={() => setSelectedTag(tagName)}
               />
             ))}
           </tbody>
@@ -87,11 +101,13 @@ const RepositoryTags: React.FC<RepositoryTagsProps> = ({
 interface TagListItemProps {
   tagName: string;
   repositoryPath: string;
+  onSelectTag: () => void;
 }
 
 const TagListItem: React.FC<TagListItemProps> = ({
   tagName,
   repositoryPath,
+  onSelectTag,
 }) => {
   const [copyStatus, setCopyStatus] = useState("Copy");
   const pullCommand = `docker pull ${repositoryPath}:${tagName}`;
@@ -113,8 +129,13 @@ const TagListItem: React.FC<TagListItemProps> = ({
 
   return (
     <tr className="hover:bg-slate-700/50 transition-colors duration-150 group">
-      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-400">
-        {tagName}
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+        <button
+          onClick={onSelectTag}
+          className="text-indigo-400 hover:text-indigo-300 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+        >
+          {tagName}
+        </button>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400 font-mono">
         {pullCommand}

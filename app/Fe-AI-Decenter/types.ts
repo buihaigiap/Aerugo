@@ -147,3 +147,46 @@ export interface CreateApiKeyResponse {
   expires_at: string | null;
   warning: string;
 }
+
+// --- Docker Registry V2 Manifest Types ---
+
+export interface ManifestLayer {
+  mediaType: string;
+  size: number;
+  digest: string;
+}
+
+export interface ManifestConfig {
+  mediaType: string;
+  size: number;
+  digest: string;
+}
+
+export interface ManifestV2 {
+  schemaVersion: number;
+  mediaType: "application/vnd.docker.distribution.manifest.v2+json";
+  config: ManifestConfig;
+  layers: ManifestLayer[];
+}
+
+// --- Docker Registry V2 Manifest List Types ---
+
+export interface ManifestListPlatform {
+  architecture: string;
+  os: string;
+  "os.version"?: string;
+  variant?: string;
+}
+
+export interface ManifestListEntry {
+  mediaType: string;
+  size: number;
+  digest: string;
+  platform: ManifestListPlatform;
+}
+
+export interface ManifestListV2 {
+  schemaVersion: number;
+  mediaType: "application/vnd.docker.distribution.manifest.list.v2+json";
+  manifests: ManifestListEntry[];
+}

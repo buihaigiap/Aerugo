@@ -19,6 +19,8 @@ import {
   ApiKey,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
+  ManifestV2,
+  ManifestListV2,
 } from "../types";
 
 // Interface to match the structure of the API response for organizations
@@ -66,11 +68,26 @@ class ApiError extends Error {
 const handleError = (error: any): never => {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status || 500;
-    // Attempt to get a meaningful error message from the response body
-    const message =
-      error.response?.data?.message ||
-      error.response?.data?.error ||
-      error.message;
+    let message = error.message;
+
+    const responseData = error.response?.data;
+    if (responseData) {
+      // Handle custom API error format { message: "..." } or { error: "..." }
+      if (typeof responseData.message === "string") {
+        message = responseData.message;
+      } else if (typeof responseData.error === "string") {
+        message = responseData.error;
+        // Handle Docker V2 Registry error format { errors: [{ code: "...", message: "..." }] }
+      } else if (
+        Array.isArray(responseData.errors) &&
+        responseData.errors.length > 0
+      ) {
+        message = responseData.errors
+          .map((e: any) => e.message || e.code)
+          .join(", ");
+      }
+    }
+
     throw new ApiError(message, status);
   }
   // Fallback for non-axios errors
@@ -352,6 +369,32 @@ export const fetchRepositoryDetails = async (
     };
   } catch (error) {
     // Handle all other errors.
+    handleError(error);
+  }
+};
+
+export const fetchManifestByReference = async (
+  namespace: string,
+  repoName: string,
+  reference: string,
+  token: string
+): Promise<ManifestV2 | ManifestListV2> => {
+  try {
+    const response = await axios.get<ManifestV2 | ManifestListV2>(
+      `${API_BASE_URL}/v2/${namespace}/${repoName}/manifests/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Request multiple manifest types to be more robust and compatible.
+          Accept: [
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+          ].join(", "),
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
     handleError(error);
   }
 };
