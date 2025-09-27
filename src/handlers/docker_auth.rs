@@ -343,8 +343,8 @@ pub async fn check_repository_permission(
                 Ok(true)
             }
             "push" => {
-                // Only admins and maintainers can push
-                Ok(member.role == "admin" || member.role == "maintainer")
+                // Only owners, admins and maintainers can push
+                Ok(member.role == "owner" || member.role == "admin" || member.role == "maintainer")
             }
             "delete" => {
                 // Only admins can delete
@@ -353,17 +353,87 @@ pub async fn check_repository_permission(
             _ => Ok(false)
         }
     } else {
-        // Check if user is the repository creator
-        let creator_result = sqlx::query!(
-            "SELECT r.id 
+        // User is not a member of the organization
+        // Check if repository is public or if user is the creator
+        let repo_result = sqlx::query!(
+            "SELECT r.id, r.is_public, r.created_by
              FROM repositories r
              JOIN organizations o ON r.organization_id = o.id
-             WHERE r.created_by = $1 AND o.name = $2 AND r.name = $3",
-            user_id_int, namespace, repository
+             WHERE o.name = $1 AND r.name = $2",
+            namespace, repository
         )
         .fetch_optional(&state.db_pool)
         .await?;
 
-        Ok(creator_result.is_some())
+        if let Some(repo) = repo_result {
+            match operation {
+                "pull" => {
+                    // Allow pull if repository is public OR user is the creator OR user has org access
+                    if repo.is_public || repo.created_by == Some(user_id_int) {
+                        return Ok(true);
+                    }
+                    
+                    // Check organization membership for private repos
+                    let org_member = sqlx::query!(
+                        "SELECT role FROM organization_members om 
+                         JOIN organizations o ON om.organization_id = o.id 
+                         WHERE om.user_id = $1 AND o.name = $2",
+                        user_id_int, namespace
+                    )
+                    .fetch_optional(&state.db_pool)
+                    .await?;
+                    
+                    Ok(org_member.is_some()) // Any org member can pull
+                }
+                "push" => {
+                    // Allow push if user is the creator
+                    if repo.created_by == Some(user_id_int) {
+                        return Ok(true);
+                    }
+                    
+                    // Check organization membership - only owner/maintainer can push
+                    let org_member = sqlx::query!(
+                        "SELECT role FROM organization_members om 
+                         JOIN organizations o ON om.organization_id = o.id 
+                         WHERE om.user_id = $1 AND o.name = $2",
+                        user_id_int, namespace
+                    )
+                    .fetch_optional(&state.db_pool)
+                    .await?;
+                    
+                    if let Some(member) = org_member {
+                        Ok(member.role == "owner" || member.role == "admin" || member.role == "maintainer")
+                    } else {
+                        Ok(false)
+                    }
+                }
+                "delete" => {
+                    // Allow delete if user is the creator
+                    if repo.created_by == Some(user_id_int) {
+                        return Ok(true);
+                    }
+                    
+                    // Check organization membership - only owner can delete
+                    let org_member = sqlx::query!(
+                        "SELECT role FROM organization_members om 
+                         JOIN organizations o ON om.organization_id = o.id 
+                         WHERE om.user_id = $1 AND o.name = $2",
+                        user_id_int, namespace
+                    )
+                    .fetch_optional(&state.db_pool)
+                    .await?;
+                    
+                    if let Some(member) = org_member {
+                        Ok(member.role == "owner")
+                    } else {
+                        Ok(false)
+                    }
+                }
+                _ => Ok(false)
+            }
+        } else {
+            // Repository doesn't exist
+            Ok(false)
+        }
     }
 }
